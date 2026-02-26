@@ -32,7 +32,7 @@ Project is in planning phase. This repository currently contains product docs an
 - Advanced admin features (server/library management)
 - E-book/PDF reading
 
-## Planned Tech Stack (Proposal)
+## Planned Tech Stack (Confirmed for MVP)
 
 - iOS 17+ (Swift / SwiftUI)
 - `AVFoundation` / `AVAudioSession` for playback
@@ -74,7 +74,14 @@ No special Tailscale integration is required in-app if the network path is alrea
 - Should MVP support multiple Audiobookshelf libraries/accounts, or exactly one account/server?
 - Do you want local downloads per-book only, or also per-chapter/partial download support?
 - Should the app cache streaming audio automatically (temporary cache) in addition to explicit downloads?
-- What iOS minimum version do you want to target?
+- Confirm exact minimum iOS version target (note: `iOS 26.3` looks like a typo or device build reference)
+
+## Current Product Decisions (Confirmed)
+
+- Single server/account for MVP
+- Simple native UI (not artwork-first)
+- Cellular streaming supported
+- Ask about cellular streaming behavior on first launch (with a setting to change later)
 
 ## Next Steps
 
@@ -84,4 +91,3 @@ No special Tailscale integration is required in-app if the network path is alrea
 4. Implement API client and authentication
 5. Implement playback engine + background audio
 6. Add offline downloads and sync
-

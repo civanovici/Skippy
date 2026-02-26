@@ -21,6 +21,7 @@ Deliver a fast, minimal, reliable iOS audiobook player focused on self-hosted Au
 - Download audiobook content to device storage for offline playback
 - Continue playback with phone locked / app backgrounded
 - Persist playback position and restore resume state
+- Support cellular streaming (with a user-visible setting)
 
 ## Success Criteria (MVP)
 
@@ -83,6 +84,7 @@ Deliver a fast, minimal, reliable iOS audiobook player focused on self-hosted Au
   - Server URL (HTTP/HTTPS)
   - Username
   - Password
+- Authentication is login-only against an existing Audiobookshelf server account (no in-app signup/account creation in MVP).
 - App must validate URL format before attempting login.
 - App must display clear error states for:
   - Invalid URL
@@ -120,7 +122,9 @@ Deliver a fast, minimal, reliable iOS audiobook player focused on self-hosted Au
 
 ### 4. Streaming Playback
 
-- App must support streaming playback over Wi-Fi/cellular (subject to iOS permissions/settings).
+- App must support streaming playback over Wi-Fi and cellular (subject to iOS permissions/settings).
+- App must provide a setting to disable cellular streaming if the user prefers Wi-Fi only.
+- On first launch (or first playback), app should ask the user whether to allow cellular streaming by default.
 - App must provide playback controls:
   - Play/pause
   - Seek +/- X seconds (configurable default, e.g. 15s/30s)
@@ -186,6 +190,7 @@ Deliver a fast, minimal, reliable iOS audiobook player focused on self-hosted Au
 - Obvious offline state indicators
 - Large playback controls suitable for one-handed use
 - Preserve state when returning to app from background
+- Visual style should be simple and native-first (clarity over heavy customization)
 
 ## Technical Notes (Implementation Direction)
 
@@ -235,14 +240,16 @@ Deliver a fast, minimal, reliable iOS audiobook player focused on self-hosted Au
 
 ## Open Product Decisions (Need Your Input)
 
-1. Minimum iOS version target (suggestion: iOS 17 for faster development, iOS 16 for wider compatibility)
-2. Single server/account only in MVP, or multi-server support from day one?
-3. Should signup/account creation be out of scope (login-only)? (recommended: login-only)
-4. Preferred UI style:
-   - Simple native Apple Books-like
-   - Dense list for power users
-   - Artwork-first library
-5. Should streaming over cellular be enabled by default, or opt-in?
+None for MVP scope definition.
+
+## Confirmed Product Decisions
+
+- MVP supports a single server/account only
+- Authentication is login-only against the remote Audiobookshelf server
+- Minimum iOS target is iOS 17+
+- UI direction is simple/native
+- Cellular streaming is supported
+- Cellular streaming preference is asked on first launch
 
 ## Appendix: Nice-to-Have Features (Future)
 
