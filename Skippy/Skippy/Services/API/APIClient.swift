@@ -7,7 +7,7 @@ protocol APIClientProtocol {
 struct APIClient: APIClientProtocol {
     let audiobookshelf: AudiobookshelfAPI
 
-    init(audiobookshelf: AudiobookshelfAPI = MockAudiobookshelfAPI()) {
+    init(audiobookshelf: AudiobookshelfAPI = AudiobookshelfHTTPAPI()) {
         self.audiobookshelf = audiobookshelf
     }
 }

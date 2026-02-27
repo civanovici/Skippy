@@ -13,7 +13,15 @@ struct LibraryView: View {
                 if viewModel.isLoading {
                     ProgressView("Loading library…")
                 } else if let errorMessage = viewModel.errorMessage {
-                    ContentUnavailableView("Unable to load library", systemImage: "wifi.exclamationmark", description: Text(errorMessage))
+                    VStack(spacing: 12) {
+                        ContentUnavailableView("Unable to load library", systemImage: "wifi.exclamationmark", description: Text(errorMessage))
+                        Button("Retry") {
+                            Task {
+                                await viewModel.load()
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
                 } else if viewModel.books.isEmpty {
                     ContentUnavailableView("No audiobooks", systemImage: "books.vertical")
                 } else {
@@ -26,13 +34,34 @@ struct LibraryView: View {
                                 }
                             )
                         } label: {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(book.title)
-                                    .font(.headline)
-                                Text(book.author)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                ProgressView(value: book.progress)
+                            HStack(alignment: .top, spacing: 12) {
+                                AsyncImage(url: book.coverURL) { phase in
+                                    switch phase {
+                                    case let .success(image):
+                                        image
+                                            .resizable()
+                                            .scaledToFill()
+                                    default:
+                                        ZStack {
+                                            Color.secondary.opacity(0.15)
+                                            Image(systemName: "books.vertical")
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                }
+                                .frame(width: 54, height: 54)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(book.title)
+                                        .font(.headline)
+                                        .lineLimit(2)
+                                    Text(book.author)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                    ProgressView(value: book.progress)
+                                }
                             }
                         }
                     }
@@ -59,7 +88,7 @@ struct LibraryView: View {
 
 #Preview {
     LibraryView(
-        viewModel: LibraryViewModel(apiClient: APIClient(), authStore: AuthStore.previewAuthenticated, logger: Logger()),
+        viewModel: LibraryViewModel(apiClient: APIClient(audiobookshelf: MockAudiobookshelfAPI()), authStore: AuthStore.previewAuthenticated, logger: Logger()),
         onLogout: {},
         makeBookDetailViewModel: { BookDetailViewModel(book: $0) },
         makePlayerViewModel: { book, chapter in

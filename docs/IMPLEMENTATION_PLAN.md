@@ -136,31 +136,115 @@ Goal: Let user connect to an Audiobookshelf server and persist session.
 - Successful login against a real Audiobookshelf server
 - App reopens without requiring login again (if session valid)
 
-## Phase 3: Library Browsing (Real Data)
+## Phase 3: Discovery Surfaces (Home/Library/Series/Collections)
 
-Goal: Show the user’s audiobook library from Audiobookshelf.
+Goal: Build the core browsing experience to match Audiobookshelf navigation patterns and metadata richness.
 
 ### User-Facing Scope
 
-- Library list with title/author/cover/progress
-- Pull to refresh
-- Open book details
+- Top-level authenticated tabs/screens:
+  - Home
+  - Library (Books)
+  - Series
+  - Collections
+- Search available from each screen
+- Shelf-based browsing experience for audiobooks (horizontal rails with covers)
+- Rich metadata shown in cards/detail previews (title, author, progress, series/collection context)
+
+### API Notes (Confirmed from Audiobookshelf docs)
+
+- Auth:
+  - `POST /login` (token is typically in `user.token` in current server responses)
+- Navigation/data:
+  - `GET /api/libraries`
+  - `GET /api/libraries/{id}/personalized`
+  - `GET /api/libraries/{id}/items`
+  - `GET /api/libraries/{id}/series`
+  - `GET /api/libraries/{id}/collections`
+  - `GET /api/libraries/{id}/search`
+  - `GET /api/libraries/{id}/filterdata`
+- Metadata/assets:
+  - `GET /api/items/{id}`
+  - `GET /api/items/{id}/cover`
 
 ### Checkpoints
 
-- [ ] Add library fetch API call(s)
-- [ ] Map API response to app models
-- [ ] Build library list UI
-- [ ] Cover image loading/caching strategy (basic)
-- [ ] Pull-to-refresh
-- [ ] Empty state UI
-- [ ] Error state + retry UI
-- [ ] Navigate to book detail
-- [ ] Optional (if low effort): search/filter
+- [x] Add baseline library fetch API call(s)
+- [x] Map core list response into app models
+- [x] Build initial list UI with pull-to-refresh and error/empty handling
+- [ ] Add authenticated tab shell for `Home | Library | Series | Collections`
+- [ ] Implement Home screen using `/personalized` sections as shelves
+- [ ] Implement Library screen using `/items` with sort/filter support from `/filterdata`
+- [ ] Implement Series screen using `/series` endpoint + series artwork/title/count
+- [ ] Implement Collections screen using `/collections` endpoint + collection artwork/title
+- [ ] Implement search on each screen using `/search` and context-aware scopes
+- [ ] Create reusable `ShelfView` component:
+  - [ ] horizontal scroll
+  - [ ] cover image
+  - [ ] title/author/progress overlays
+  - [ ] tap-through to detail/player entry points
+- [ ] Expand metadata mapping from `/items/{id}` for richer detail pages
+- [ ] Add pagination strategy for large libraries (server-side page/limit)
+- [ ] Add basic local image caching strategy for covers
 
 ### Exit Criteria
 
-- Authenticated user can browse actual library and open a book detail screen
+- User can browse Home, Library, Series, and Collections with search on each screen
+- Shelf view is used for audiobook rails and is performant with real server data
+- Metadata and covers render reliably from live Audiobookshelf responses
+
+### Execution Milestones (Recommended)
+
+Use short-lived branches from latest `main`, then merge sequentially:
+
+1. `codex/phase-3a-tabs-navigation`
+- Scope:
+  - Add authenticated tab shell for `Home | Library | Series | Collections`
+  - Keep existing Library data loading working inside new shell
+- Done when:
+  - User can switch between all 4 screens
+  - Existing login/logout flow still works
+
+2. `codex/phase-3b-home-shelves`
+- Scope:
+  - Implement Home screen using `/api/libraries/{id}/personalized`
+  - Add reusable `ShelfView` for horizontal rails
+- Done when:
+  - Personalized shelves render with covers/titles
+  - Tapping a shelf item opens detail
+
+3. `codex/phase-3c-library-upgrade`
+- Scope:
+  - Upgrade Library screen to use `/api/libraries/{id}/items` + `/filterdata`
+  - Add sort/filter controls and better empty/error states
+- Done when:
+  - Library supports server-driven sorting/filter metadata
+  - Large lists remain responsive
+
+4. `codex/phase-3d-series-collections`
+- Scope:
+  - Implement Series (`/series`) and Collections (`/collections`) screens
+  - Reuse `ShelfView`/grid components for visual consistency
+- Done when:
+  - Series and Collections screens load real data
+  - Navigation into contained books works
+
+5. `codex/phase-3e-search-all-surfaces`
+- Scope:
+  - Add search to Home/Library/Series/Collections using `/search`
+  - Make search context-aware by active screen/scope
+- Done when:
+  - Search works on every screen
+  - Results are relevant to current browsing context
+
+6. `codex/phase-3f-metadata-polish`
+- Scope:
+  - Expand detail metadata via `/api/items/{id}`
+  - Harden cover/image handling and caching strategy
+  - Add pagination for large libraries
+- Done when:
+  - Detail screens show richer metadata reliably
+  - Scrolling and image loading perform well on realistic datasets
 
 ## Phase 4: Book Detail + Streaming Playback
 
