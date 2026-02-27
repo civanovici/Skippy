@@ -40,16 +40,7 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
 
         var booksByID: [String: Audiobook] = [:]
         for library in targetLibraries {
-            let request = makeAuthedRequest(
-                userSession.serverURL.appending(path: "/api/libraries/\(library.id)/items"),
-                token: userSession.token,
-                queryItems: [
-                    URLQueryItem(name: "minified", value: "1"),
-                    URLQueryItem(name: "limit", value: "1000"),
-                ]
-            )
-
-            let items = try await fetchLibraryItems(request: request)
+            let items = try await fetchAllLibraryItems(libraryID: library.id, userSession: userSession)
             for item in items where (item.mediaType ?? "book") == "book" {
                 booksByID[item.id] = mapAudiobook(item, userSession: userSession)
             }
@@ -91,6 +82,41 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
             coverURL: makeCoverURL(baseURL: userSession.serverURL, itemID: item.id, token: userSession.token),
             chapters: chapters
         )
+    }
+
+    private func fetchAllLibraryItems(libraryID: String, userSession: UserSession) async throws -> [LibraryItem] {
+        let pageSize = 200
+        let maxPages = 200
+
+        var allItems: [LibraryItem] = []
+        var seenIDs: Set<String> = []
+
+        for page in 0..<maxPages {
+            let request = makeAuthedRequest(
+                userSession.serverURL.appending(path: "/api/libraries/\(libraryID)/items"),
+                token: userSession.token,
+                queryItems: [
+                    URLQueryItem(name: "minified", value: "1"),
+                    URLQueryItem(name: "limit", value: "\(pageSize)"),
+                    URLQueryItem(name: "page", value: "\(page)"),
+                ]
+            )
+
+            let pageItems = try await fetchLibraryItems(request: request)
+            if pageItems.isEmpty {
+                break
+            }
+
+            let newItems = pageItems.filter { seenIDs.insert($0.id).inserted }
+            allItems.append(contentsOf: newItems)
+
+            // Stop if server starts repeating the same page or returned a partial page.
+            if newItems.isEmpty || pageItems.count < pageSize {
+                break
+            }
+        }
+
+        return allItems
     }
 
     private func fetchLibraryItems(request: URLRequest) async throws -> [LibraryItem] {
