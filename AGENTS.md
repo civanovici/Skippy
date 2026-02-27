@@ -2,50 +2,52 @@
 
 ## Project Structure & Module Organization
 
-This repository is currently in planning/setup phase.
+Core project layout:
 
-- `README.md`: project overview, MVP scope, and planned tech stack
-- `docs/PRD.md`: product requirements and feature decisions
-- `docs/IMPLEMENTATION_PLAN.md`: implementation sequencing and milestones
-- `assets/`: design assets, including SVG icon concepts and `AppIcon.appiconset`
-
-Planned source layout (not created yet):
-
-- `Skippy/`: iOS app source (Swift/SwiftUI)
-- `SkippyTests/`: unit tests
-- `SkippyUITests/`: UI/integration tests
+- `Skippy/Skippy/`: iOS app source (Swift/SwiftUI)
+- `Skippy/SkippyTests/`: unit tests
+- `Skippy/SkippyUITests/`: UI tests
+- `docs/`: product + implementation docs (`PRD.md`, `IMPLEMENTATION_PLAN.md`)
+- `assets/`: icon/design sources and generated `AppIcon.appiconset`
 
 ## Build, Test, and Development Commands
 
-There is no Xcode project checked in yet, so there are no active build/test commands today.
+Use project-local Xcode CLI commands:
 
-Once scaffolding exists, prefer standard Xcode CLI commands:
+- `xcodebuild -project Skippy/Skippy.xcodeproj -scheme Skippy -destination 'platform=iOS Simulator,name=iPhone SE (3rd generation)' build`
+- `xcodebuild -project Skippy/Skippy.xcodeproj -scheme Skippy -destination 'platform=iOS Simulator,name=iPhone SE (3rd generation)' test`
 
-- `xcodebuild -scheme Skippy -destination 'platform=iOS Simulator,name=iPhone 16' build`
-- `xcodebuild -scheme Skippy -destination 'platform=iOS Simulator,name=iPhone 16' test`
-
-Use `git status` before commits to confirm only intended files changed.
+Before commit: `git status --short` and `git diff --cached`.
 
 ## Coding Style & Naming Conventions
-
-For upcoming Swift code:
 
 - Follow Swift API Design Guidelines and Xcode default formatting (4-space indentation)
 - Use `UpperCamelCase` for types (`PlaybackViewModel`)
 - Use `lowerCamelCase` for functions/properties (`resumePosition`)
-- Keep files focused by feature (`Auth`, `Library`, `Playback`, `Downloads`)
+- Keep files grouped by module (`App`, `Features`, `Services`, `Models`, `Support`)
 
-Assets and docs should use clear, descriptive names (example: `skippy-app-icon-variant-2.svg`).
+Use clear file names for assets/docs, e.g. `skippy-app-icon-variant-2.svg`.
 
 ## Testing Guidelines
 
-Testing framework is expected to be `XCTest` (unit + UI tests) after project creation.
+Frameworks: `XCTest` + `XCUITest`.
 
 - Unit tests: `SkippyTests/`
 - UI tests: `SkippyUITests/`
-- Test names should describe behavior, e.g. `testLoginFailsWithInvalidCredentials()`
+- Name tests by behavior, e.g. `testLoginFailsWithInvalidCredentials()`
 
-Include test coverage for playback state, API parsing, auth/session handling, and offline download behavior.
+Prioritize coverage for auth/session handling, API parsing, playback state, and downloads.
+
+## Agent Review Workflow
+
+Codex code review is required by default before each commit and before each push.
+
+- Stage changes first: `git add ...`
+- Request review: `review staged changes`
+- Only commit after review issues are resolved or explicitly accepted
+- Before pushing, request a final review of the branch diff against `origin/main`
+
+If no staged diff exists, do not commit.
 
 ## Commit & Pull Request Guidelines
 
