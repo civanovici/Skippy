@@ -6,27 +6,7 @@ struct RootView: View {
     var body: some View {
         Group {
             if dependencies.authStore.isAuthenticated {
-                LibraryView(
-                    viewModel: LibraryViewModel(
-                        apiClient: dependencies.apiClient,
-                        authStore: dependencies.authStore,
-                        logger: dependencies.logger
-                    ),
-                    onLogout: {
-                        dependencies.authStore.signOut()
-                    },
-                    makeBookDetailViewModel: { book in
-                        BookDetailViewModel(book: book)
-                    },
-                    makePlayerViewModel: { book, chapter in
-                        PlayerViewModel(
-                            audiobook: book,
-                            chapter: chapter,
-                            playerService: dependencies.playerService,
-                            nowPlayingService: dependencies.nowPlayingService
-                        )
-                    }
-                )
+                AuthenticatedTabView()
             } else {
                 LoginView(
                     viewModel: LoginViewModel(

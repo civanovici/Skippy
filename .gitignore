@@ -34,3 +34,5 @@ fastlane/test_output/
 # macOS
 .DS_Store
 
+# Local Xcode signing overrides
+Skippy/Config/Signing/Signing.local.xcconfig

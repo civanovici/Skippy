@@ -24,6 +24,14 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		A1B2C3D4E5F60718293A0010 /* Skippy-Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Skippy-Debug.xcconfig"; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0011 /* Skippy-Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Skippy-Release.xcconfig"; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0012 /* SkippyTests-Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "SkippyTests-Debug.xcconfig"; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0013 /* SkippyTests-Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "SkippyTests-Release.xcconfig"; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0014 /* SkippyUITests-Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "SkippyUITests-Debug.xcconfig"; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0015 /* SkippyUITests-Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "SkippyUITests-Release.xcconfig"; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0016 /* Signing.shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Signing.shared.xcconfig"; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0017 /* Signing.local.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Signing.local.xcconfig.example"; sourceTree = "<group>"; };
 		BB21C6FD2F516586008A60A5 /* Skippy.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Skippy.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB21C70D2F516587008A60A5 /* SkippyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SkippyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB21C7172F516587008A60A5 /* SkippyUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SkippyUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -75,11 +83,43 @@
 		BB21C6F42F516586008A60A5 = {
 			isa = PBXGroup;
 			children = (
+				A1B2C3D4E5F60718293A0001 /* Config */,
 				BB21C6FF2F516586008A60A5 /* Skippy */,
 				BB21C7102F516587008A60A5 /* SkippyTests */,
 				BB21C71A2F516587008A60A5 /* SkippyUITests */,
 				BB21C6FE2F516586008A60A5 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F60718293A0001 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F60718293A0002 /* Targets */,
+				A1B2C3D4E5F60718293A0003 /* Signing */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F60718293A0002 /* Targets */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F60718293A0010 /* Skippy-Debug.xcconfig */,
+				A1B2C3D4E5F60718293A0011 /* Skippy-Release.xcconfig */,
+				A1B2C3D4E5F60718293A0012 /* SkippyTests-Debug.xcconfig */,
+				A1B2C3D4E5F60718293A0013 /* SkippyTests-Release.xcconfig */,
+				A1B2C3D4E5F60718293A0014 /* SkippyUITests-Debug.xcconfig */,
+				A1B2C3D4E5F60718293A0015 /* SkippyUITests-Release.xcconfig */,
+			);
+			path = Targets;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F60718293A0003 /* Signing */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F60718293A0016 /* Signing.shared.xcconfig */,
+				A1B2C3D4E5F60718293A0017 /* Signing.local.xcconfig.example */,
+			);
+			path = Signing;
 			sourceTree = "<group>";
 		};
 		BB21C6FE2F516586008A60A5 /* Products */ = {
@@ -390,13 +430,13 @@
 		};
 		BB21C7222F516587008A60A5 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = A1B2C3D4E5F60718293A0010 /* Skippy-Debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Skippy/Preview Content\"";
-				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -410,7 +450,6 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.skippy;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -420,13 +459,13 @@
 		};
 		BB21C7232F516587008A60A5 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = A1B2C3D4E5F60718293A0011 /* Skippy-Release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Skippy/Preview Content\"";
-				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -440,7 +479,6 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.skippy;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -450,15 +488,14 @@
 		};
 		BB21C7252F516587008A60A5 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = A1B2C3D4E5F60718293A0012 /* SkippyTests-Debug.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.skippyTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
@@ -469,15 +506,14 @@
 		};
 		BB21C7262F516587008A60A5 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = A1B2C3D4E5F60718293A0013 /* SkippyTests-Release.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.skippyTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
@@ -488,13 +524,12 @@
 		};
 		BB21C7282F516587008A60A5 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = A1B2C3D4E5F60718293A0014 /* SkippyUITests-Debug.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.skippyUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
@@ -505,13 +540,12 @@
 		};
 		BB21C7292F516587008A60A5 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = A1B2C3D4E5F60718293A0015 /* SkippyUITests-Release.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.skippyUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
