@@ -17,9 +17,18 @@ struct RootView: View {
 
     var body: some View {
         if appState.isAuthenticated {
-            ContentView()
+            AuthenticatedPlaceholderView()
         } else {
             UnauthenticatedPlaceholderView()
+        }
+    }
+}
+
+struct AuthenticatedPlaceholderView: View {
+    var body: some View {
+        NavigationStack {
+            Text("Library placeholder (Phase 1)")
+                .navigationTitle("Library")
         }
     }
 }
