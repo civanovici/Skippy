@@ -2,7 +2,7 @@ import SwiftUI
 
 struct LibraryView: View {
     @State var viewModel: LibraryViewModel
-    let onLogout: () -> Void
+    @State private var searchText = ""
 
     let makeBookDetailViewModel: (Audiobook) -> BookDetailViewModel
     let makePlayerViewModel: (Audiobook, Chapter?) -> PlayerViewModel
@@ -22,12 +22,16 @@ struct LibraryView: View {
                         }
                         .buttonStyle(.borderedProminent)
                     }
-                } else if viewModel.books.isEmpty {
-                    ContentUnavailableView("No audiobooks", systemImage: "books.vertical")
+                } else if filteredBooks.isEmpty {
+                    if searchQuery.isEmpty {
+                        ContentUnavailableView("No audiobooks", systemImage: "books.vertical")
+                    } else {
+                        ContentUnavailableView("No results", systemImage: "magnifyingglass", description: Text("No books match \"\(searchQuery)\"."))
+                    }
                 } else {
                     ScrollView {
                         LazyVGrid(columns: gridColumns, spacing: 14) {
-                            ForEach(viewModel.books) { book in
+                            ForEach(filteredBooks) { book in
                                 NavigationLink {
                                     BookDetailView(
                                         viewModel: makeBookDetailViewModel(book),
@@ -47,10 +51,18 @@ struct LibraryView: View {
                 }
             }
             .navigationTitle("Library")
+            .searchable(text: $searchText, prompt: "Search library")
+            .task(id: searchText) {
+                try? await Task.sleep(for: .milliseconds(300))
+                guard !Task.isCancelled else {
+                    return
+                }
+                await viewModel.search(query: searchText)
+            }
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Logout", role: .destructive) {
-                        onLogout()
+                if viewModel.isSearching {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        ProgressView()
                     }
                 }
             }
@@ -68,12 +80,22 @@ struct LibraryView: View {
             GridItem(.adaptive(minimum: 150, maximum: 190), spacing: 14, alignment: .top),
         ]
     }
+
+    private var filteredBooks: [Audiobook] {
+        guard !searchQuery.isEmpty else {
+            return viewModel.books
+        }
+        return viewModel.searchResults
+    }
+
+    private var searchQuery: String {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }
 
 #Preview {
     LibraryView(
         viewModel: LibraryViewModel(apiClient: APIClient(audiobookshelf: MockAudiobookshelfAPI()), authStore: AuthStore.previewAuthenticated, logger: Logger()),
-        onLogout: {},
         makeBookDetailViewModel: { BookDetailViewModel(book: $0) },
         makePlayerViewModel: { book, chapter in
             PlayerViewModel(audiobook: book, chapter: chapter, playerService: PlayerService(), nowPlayingService: NowPlayingService())

@@ -8,8 +8,9 @@ final class AppState {
         case library
         case series
         case collections
+        case user
     }
 
-    var selectedTab: Tab = .library
+    var selectedTab: Tab = .home
     var selectedBookID: String?
 }
