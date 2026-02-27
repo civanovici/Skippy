@@ -93,12 +93,12 @@ Goal: Create the core modules/services as compilable stubs so features can be bu
 
 ### Checkpoints
 
-- [ ] Define app navigation flow (`unauthenticated -> library -> player/detail`)
-- [ ] Add dependency container / service wiring
-- [ ] Add model stubs and mock data
-- [ ] Add protocol-based interfaces for API, playback, downloads
-- [ ] Root view switches between login and library based on auth state
-- [ ] Project compiles with all stubs in place
+- [x] Define app navigation flow (`unauthenticated -> library -> player/detail`)
+- [x] Add dependency container / service wiring
+- [x] Add model stubs and mock data
+- [x] Add protocol-based interfaces for API, playback, downloads
+- [x] Root view switches between login and library based on auth state
+- [x] Project compiles with all stubs in place
 
 ### Exit Criteria
 
