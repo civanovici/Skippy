@@ -470,6 +470,61 @@ struct SkippyTests {
     }
 
     @Test
+    func fetchBookDetailsMapsMetadataAndMedia() async throws {
+        let session = makeSession { request in
+            let path = request.url?.path ?? ""
+            if path == "/api/items/book-1" {
+                let payload = """
+                {
+                  "media":{
+                    "metadata":{
+                      "subtitle":"Series 1",
+                      "narrators":["R.C. Bray"],
+                      "genres":["Audiobook","Sci-Fi"],
+                      "publishedYear":2026,
+                      "publisher":"Podium Audio",
+                      "descriptionPlain":"Details description"
+                    },
+                    "duration":7200,
+                    "size":1073741824,
+                    "chapters":[
+                      {"id":1,"title":"Chapter One","start":0,"end":60}
+                    ],
+                    "tracks":[
+                      {"ino":"track-1","duration":3600,"metadata":{"filename":"part1.m4b"}}
+                    ]
+                  }
+                }
+                """
+                return ok(request.url!, payload)
+            }
+            return ok(request.url!, #"{}"#)
+        }
+
+        let api = AudiobookshelfHTTPAPI(session: session)
+        let details = try await api.fetchBookDetails(
+            session: UserSession(
+                serverURL: URL(string: "http://example.test:1234")!,
+                username: "u",
+                token: "tkn"
+            ),
+            itemID: "book-1"
+        )
+
+        #expect(details.subtitle == "Series 1")
+        #expect(details.narrators == ["R.C. Bray"])
+        #expect(details.publishedYear == "2026")
+        #expect(details.publisher == "Podium Audio")
+        #expect(details.description == "Details description")
+        #expect(details.duration == 7200)
+        #expect(details.sizeBytes == 1073741824)
+        #expect(details.chapters.count == 1)
+        #expect(details.chapters[0].id == "1")
+        #expect(details.tracks.count == 1)
+        #expect(details.tracks[0].title == "part1.m4b")
+    }
+
+    @Test
     func fetchSeriesAggregatesAcrossLibrariesAndPages() async throws {
         let firstPageSeries = (0..<100).map { index in
             """
@@ -709,6 +764,7 @@ private struct StubAPIClient: APIClientProtocol {
 private struct StubAudiobookshelfAPI: AudiobookshelfAPI {
     var loginImpl: ((String, String, String) async throws -> UserSession)?
     var fetchLibraryImpl: ((UserSession) async throws -> [Audiobook])?
+    var fetchBookDetailsImpl: ((UserSession, String) async throws -> AudiobookDetails)?
     var fetchPersonalizedShelvesImpl: ((UserSession) async throws -> [HomeShelf])?
     var fetchSeriesImpl: ((UserSession) async throws -> [HomeShelf])?
     var fetchCollectionsImpl: ((UserSession) async throws -> [HomeShelf])?
@@ -730,6 +786,24 @@ private struct StubAudiobookshelfAPI: AudiobookshelfAPI {
             return try await fetchLibraryImpl(session)
         }
         return []
+    }
+
+    func fetchBookDetails(session: UserSession, itemID: String) async throws -> AudiobookDetails {
+        if let fetchBookDetailsImpl {
+            return try await fetchBookDetailsImpl(session, itemID)
+        }
+        return AudiobookDetails(
+            subtitle: nil,
+            narrators: [],
+            publishedYear: nil,
+            publisher: nil,
+            genres: [],
+            description: nil,
+            duration: nil,
+            sizeBytes: nil,
+            chapters: [],
+            tracks: []
+        )
     }
 
     func fetchPersonalizedShelves(session: UserSession) async throws -> [HomeShelf] {

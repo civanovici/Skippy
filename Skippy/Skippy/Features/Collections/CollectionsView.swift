@@ -98,7 +98,14 @@ struct CollectionsView: View {
 #Preview {
     CollectionsView(
         viewModel: CollectionsViewModel(apiClient: APIClient(audiobookshelf: MockAudiobookshelfAPI()), authStore: AuthStore.previewAuthenticated, logger: Logger()),
-        makeBookDetailViewModel: { BookDetailViewModel(book: $0) },
+        makeBookDetailViewModel: {
+            BookDetailViewModel(
+                book: $0,
+                apiClient: APIClient(audiobookshelf: MockAudiobookshelfAPI()),
+                authStore: AuthStore.previewAuthenticated,
+                logger: Logger()
+            )
+        },
         makePlayerViewModel: { book, chapter in
             PlayerViewModel(audiobook: book, chapter: chapter, playerService: PlayerService(), nowPlayingService: NowPlayingService())
         }

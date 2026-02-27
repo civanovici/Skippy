@@ -3,6 +3,7 @@ import Foundation
 protocol AudiobookshelfAPI {
     func login(serverURL: String, username: String, password: String) async throws -> UserSession
     func fetchLibrary(session: UserSession) async throws -> [Audiobook]
+    func fetchBookDetails(session: UserSession, itemID: String) async throws -> AudiobookDetails
     func fetchPersonalizedShelves(session: UserSession) async throws -> [HomeShelf]
     func fetchSeries(session: UserSession) async throws -> [HomeShelf]
     func fetchCollections(session: UserSession) async throws -> [HomeShelf]
@@ -51,6 +52,22 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
         return booksByID.values.sorted {
             $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
         }
+    }
+
+    func fetchBookDetails(session userSession: UserSession, itemID: String) async throws -> AudiobookDetails {
+        let itemURL = userSession.serverURL
+            .appending(path: "/api/items")
+            .appending(path: itemID)
+        let request = makeAuthedRequest(
+            itemURL,
+            token: userSession.token,
+            queryItems: [
+                URLQueryItem(name: "expanded", value: "1"),
+            ]
+        )
+
+        let payload: ItemDetailsResponse = try await decode(request, expecting: ItemDetailsResponse.self)
+        return mapBookDetails(payload, itemID: itemID)
     }
 
     func fetchPersonalizedShelves(session userSession: UserSession) async throws -> [HomeShelf] {
@@ -196,6 +213,40 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
             progress: min(max(progress, 0), 1),
             coverURL: makeCoverURL(baseURL: userSession.serverURL, itemID: item.id, token: userSession.token),
             chapters: chapters
+        )
+    }
+
+    private func mapBookDetails(_ item: ItemDetailsResponse, itemID: String) -> AudiobookDetails {
+        let media = item.media
+        let metadata = media?.metadata
+        let chapters = (media?.chapters ?? []).enumerated().map { index, chapter in
+            Chapter(
+                id: chapter.id ?? "\(itemID)-ch-\(index)",
+                title: chapter.title?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? "Chapter \(index + 1)",
+                duration: max((chapter.end ?? 0) - (chapter.start ?? 0), 0)
+            )
+        }
+        let tracks = (media?.tracks ?? []).enumerated().map { index, track in
+            AudiobookTrack(
+                id: track.ino ?? "\(itemID)-track-\(index)",
+                title: track.title?.nonEmpty
+                    ?? track.metadata?.filename?.nonEmpty
+                    ?? "Track \(index + 1)",
+                duration: track.duration
+            )
+        }
+
+        return AudiobookDetails(
+            subtitle: metadata?.subtitle?.nonEmpty,
+            narrators: metadata?.narrators ?? [],
+            publishedYear: metadata?.publishedYear?.nonEmpty,
+            publisher: metadata?.publisher?.nonEmpty,
+            genres: metadata?.genres ?? [],
+            description: metadata?.descriptionPlain?.nonEmpty ?? metadata?.description?.nonEmpty,
+            duration: media?.duration,
+            sizeBytes: media?.size,
+            chapters: chapters,
+            tracks: tracks
         )
     }
 
@@ -521,6 +572,26 @@ struct MockAudiobookshelfAPI: AudiobookshelfAPI {
         return Audiobook.mockLibrary
     }
 
+    func fetchBookDetails(session: UserSession, itemID: String) async throws -> AudiobookDetails {
+        guard !session.token.isEmpty else {
+            throw APIError.unauthorized
+        }
+        return AudiobookDetails(
+            subtitle: "Expeditionary Force, Book 1",
+            narrators: ["R.C. Bray"],
+            publishedYear: "2016",
+            publisher: "Podium Audio",
+            genres: ["Audiobook"],
+            description: "The merry band of pirates starts here.",
+            duration: Audiobook.mockLibrary.first?.chapters.reduce(0) { $0 + $1.duration },
+            sizeBytes: 1_110_000_000,
+            chapters: Audiobook.mockLibrary.first?.chapters ?? [],
+            tracks: [
+                AudiobookTrack(id: "track-1", title: "Columbus Day.m4b", duration: 3600),
+            ]
+        )
+    }
+
     func fetchPersonalizedShelves(session: UserSession) async throws -> [HomeShelf] {
         guard !session.token.isEmpty else {
             throw APIError.unauthorized
@@ -708,6 +779,67 @@ private struct LibraryItemChapter: Decodable {
     }
 }
 
+private struct ItemDetailsResponse: Decodable {
+    let media: ItemDetailsMedia?
+}
+
+private struct ItemDetailsMedia: Decodable {
+    let metadata: ItemDetailsMetadata?
+    let duration: TimeInterval?
+    let size: Int64?
+    let chapters: [LibraryItemChapter]?
+    let tracks: [ItemDetailsTrack]?
+}
+
+private struct ItemDetailsMetadata: Decodable {
+    let subtitle: String?
+    let narrators: [String]?
+    let genres: [String]?
+    let publishedYear: String?
+    let publisher: String?
+    let description: String?
+    let descriptionPlain: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case subtitle
+        case narrators
+        case genres
+        case publishedYear
+        case publisher
+        case description
+        case descriptionPlain
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        subtitle = try container.decodeIfPresent(String.self, forKey: .subtitle)
+        narrators = try container.decodeIfPresent([String].self, forKey: .narrators)
+        genres = try container.decodeIfPresent([String].self, forKey: .genres)
+        publisher = try container.decodeIfPresent(String.self, forKey: .publisher)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        descriptionPlain = try container.decodeIfPresent(String.self, forKey: .descriptionPlain)
+
+        if let yearString = try container.decodeIfPresent(String.self, forKey: .publishedYear) {
+            publishedYear = yearString
+        } else if let yearInt = try container.decodeIfPresent(Int.self, forKey: .publishedYear) {
+            publishedYear = String(yearInt)
+        } else {
+            publishedYear = nil
+        }
+    }
+}
+
+private struct ItemDetailsTrack: Decodable {
+    let ino: String?
+    let title: String?
+    let duration: TimeInterval?
+    let metadata: ItemDetailsTrackMetadata?
+}
+
+private struct ItemDetailsTrackMetadata: Decodable {
+    let filename: String?
+}
+
 private struct PersonalizedShelf: Decodable {
     let id: String
     let label: String
@@ -792,6 +924,13 @@ private struct GroupedShelf: Decodable {
 
 private struct LibraryItemWrapper: Decodable {
     let libraryItem: LibraryItem?
+}
+
+private extension String {
+    var nonEmpty: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
 }
 
 struct SearchResult {
