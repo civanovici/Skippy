@@ -1,0 +1,5 @@
+// Copy to Signing.local.xcconfig and set your local values.
+SKIPPY_DEVELOPMENT_TEAM = YOUR_TEAM_ID
+SKIPPY_APP_BUNDLE_IDENTIFIER = ro.robotfun.skippy
+SKIPPY_TESTS_BUNDLE_IDENTIFIER = ro.robotfun.skippyTests
+SKIPPY_UITESTS_BUNDLE_IDENTIFIER = ro.robotfun.skippyUITests

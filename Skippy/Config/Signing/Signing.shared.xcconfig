@@ -1,0 +1,8 @@
+// Shared signing defaults committed to repo.
+// Local overrides are loaded from Signing.local.xcconfig (gitignored).
+SKIPPY_DEVELOPMENT_TEAM =
+SKIPPY_APP_BUNDLE_IDENTIFIER = com.example.skippy
+SKIPPY_TESTS_BUNDLE_IDENTIFIER = com.example.skippyTests
+SKIPPY_UITESTS_BUNDLE_IDENTIFIER = com.example.skippyUITests
+
+#include? "Signing.local.xcconfig"
