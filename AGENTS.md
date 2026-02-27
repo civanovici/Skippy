@@ -16,6 +16,8 @@ Use project-local Xcode CLI commands:
 
 - `xcodebuild -project Skippy/Skippy.xcodeproj -scheme Skippy -destination 'platform=iOS Simulator,name=iPhone SE (3rd generation)' build`
 - `xcodebuild -project Skippy/Skippy.xcodeproj -scheme Skippy -destination 'platform=iOS Simulator,name=iPhone SE (3rd generation)' test`
+- `./scripts/precommit.sh`: local build + unit-test gate before commit
+- `./scripts/prepush.sh`: local build + full test gate before push
 
 Before commit: `git status --short` and `git diff --cached`.
 
@@ -47,6 +49,7 @@ Codex code review is required by default before each commit and before each push
 - Only commit after review issues are resolved or explicitly accepted
 - Before pushing, request a final review of the branch diff against `origin/main`
 - Run tests before each commit (`xcodebuild ... test` for relevant targets/schemes)
+- Prefer `./scripts/precommit.sh` before commit and `./scripts/prepush.sh` before push
 - If tests cannot run, explicitly record the reason in the commit/PR notes
 
 If no staged diff exists, do not commit.

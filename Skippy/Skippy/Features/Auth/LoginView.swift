@@ -52,7 +52,7 @@ struct LoginView: View {
 #Preview {
     LoginView(
         viewModel: LoginViewModel(
-            apiClient: APIClient(),
+            apiClient: APIClient(audiobookshelf: MockAudiobookshelfAPI()),
             authStore: AuthStore(keychainStore: KeychainStore(), logger: Logger()),
             logger: Logger()
         )

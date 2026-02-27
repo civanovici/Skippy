@@ -29,11 +29,24 @@ final class AppDependencies {
         self.logger = logger
     }
 
+    static func makeLive() -> AppDependencies {
+        let logger = Logger()
+        return AppDependencies(
+            authStore: AuthStore(keychainStore: KeychainStore(), logger: logger),
+            apiClient: APIClient(audiobookshelf: AudiobookshelfHTTPAPI()),
+            playerService: PlayerService(),
+            nowPlayingService: NowPlayingService(),
+            downloadManager: DownloadManager(),
+            persistenceController: .shared,
+            logger: logger
+        )
+    }
+
     static func makeMock() -> AppDependencies {
         let logger = Logger()
         return AppDependencies(
             authStore: AuthStore(keychainStore: KeychainStore(), logger: logger),
-            apiClient: APIClient(),
+            apiClient: APIClient(audiobookshelf: MockAudiobookshelfAPI()),
             playerService: PlayerService(),
             nowPlayingService: NowPlayingService(),
             downloadManager: DownloadManager(),
