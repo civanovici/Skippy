@@ -172,17 +172,19 @@ Goal: Build the core browsing experience to match Audiobookshelf navigation patt
 - [x] Add baseline library fetch API call(s)
 - [x] Map core list response into app models
 - [x] Build initial list UI with pull-to-refresh and error/empty handling
-- [ ] Add authenticated tab shell for `Home | Library | Series | Collections`
-- [ ] Implement Home screen using `/personalized` sections as shelves
+- [x] Add authenticated tab shell for `Home | Library | Series | Collections`
+- [x] Implement Home screen using `/personalized` sections as shelves
 - [ ] Implement Library screen using `/items` with sort/filter support from `/filterdata`
-- [ ] Implement Series screen using `/series` endpoint + series artwork/title/count
-- [ ] Implement Collections screen using `/collections` endpoint + collection artwork/title
-- [ ] Implement search on each screen using `/search` and context-aware scopes
-- [ ] Create reusable `ShelfView` component:
-  - [ ] horizontal scroll
-  - [ ] cover image
-  - [ ] title/author/progress overlays
-  - [ ] tap-through to detail/player entry points
+- [x] Implement Series screen using `/series` endpoint + series artwork/title/count
+- [x] Implement Collections screen using `/collections` endpoint + collection artwork/title
+- [x] Implement search on each screen using `/search` and context-aware scopes
+  - [x] Local search UX on Home, Library, Series, Collections
+  - [x] Server-backed `/search` integration per surface
+- [x] Create reusable `ShelfView` component:
+  - [x] horizontal scroll
+  - [x] cover image
+  - [x] title/author/progress overlays
+  - [x] tap-through to detail/player entry points
 - [ ] Expand metadata mapping from `/items/{id}` for richer detail pages
 - [ ] Add pagination strategy for large libraries (server-side page/limit)
 - [ ] Add basic local image caching strategy for covers
@@ -210,8 +212,8 @@ Use short-lived branches from latest `main`, then merge sequentially:
   - Implement Home screen using `/api/libraries/{id}/personalized`
   - Add reusable `ShelfView` for horizontal rails
 - Done when:
-  - Personalized shelves render with covers/titles
-  - Tapping a shelf item opens detail
+  - [x] Personalized shelves render with covers/titles
+  - [x] Tapping a shelf item opens detail
 
 3. `codex/phase-3c-library-upgrade`
 - Scope:
@@ -226,16 +228,16 @@ Use short-lived branches from latest `main`, then merge sequentially:
   - Implement Series (`/series`) and Collections (`/collections`) screens
   - Reuse `ShelfView`/grid components for visual consistency
 - Done when:
-  - Series and Collections screens load real data
-  - Navigation into contained books works
+  - [x] Series and Collections screens load real data
+  - [x] Navigation into contained books works
 
 5. `codex/phase-3e-search-all-surfaces`
 - Scope:
   - Add search to Home/Library/Series/Collections using `/search`
   - Make search context-aware by active screen/scope
 - Done when:
-  - Search works on every screen
-  - Results are relevant to current browsing context
+  - [x] Search works on every screen
+  - [x] Results are relevant to current browsing context
 
 6. `codex/phase-3f-metadata-polish`
 - Scope:

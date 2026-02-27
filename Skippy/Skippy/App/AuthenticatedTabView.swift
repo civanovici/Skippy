@@ -8,7 +8,24 @@ struct AuthenticatedTabView: View {
         @Bindable var appState = appState
 
         TabView(selection: $appState.selectedTab) {
-            HomeView()
+            HomeView(
+                viewModel: HomeViewModel(
+                    apiClient: dependencies.apiClient,
+                    authStore: dependencies.authStore,
+                    logger: dependencies.logger
+                ),
+                makeBookDetailViewModel: { book in
+                    BookDetailViewModel(book: book)
+                },
+                makePlayerViewModel: { book, chapter in
+                    PlayerViewModel(
+                        audiobook: book,
+                        chapter: chapter,
+                        playerService: dependencies.playerService,
+                        nowPlayingService: dependencies.nowPlayingService
+                    )
+                }
+            )
                 .tabItem {
                     Label("Home", systemImage: "house.fill")
                 }
@@ -20,9 +37,6 @@ struct AuthenticatedTabView: View {
                     authStore: dependencies.authStore,
                     logger: dependencies.logger
                 ),
-                onLogout: {
-                    dependencies.authStore.signOut()
-                },
                 makeBookDetailViewModel: { book in
                     BookDetailViewModel(book: book)
                 },
@@ -40,17 +54,62 @@ struct AuthenticatedTabView: View {
             }
             .tag(AppState.Tab.library)
 
-            SeriesView()
+            SeriesView(
+                viewModel: SeriesViewModel(
+                    apiClient: dependencies.apiClient,
+                    authStore: dependencies.authStore,
+                    logger: dependencies.logger
+                ),
+                makeBookDetailViewModel: { book in
+                    BookDetailViewModel(book: book)
+                },
+                makePlayerViewModel: { book, chapter in
+                    PlayerViewModel(
+                        audiobook: book,
+                        chapter: chapter,
+                        playerService: dependencies.playerService,
+                        nowPlayingService: dependencies.nowPlayingService
+                    )
+                }
+            )
                 .tabItem {
                     Label("Series", systemImage: "square.stack.3d.up.fill")
                 }
                 .tag(AppState.Tab.series)
 
-            CollectionsView()
+            CollectionsView(
+                viewModel: CollectionsViewModel(
+                    apiClient: dependencies.apiClient,
+                    authStore: dependencies.authStore,
+                    logger: dependencies.logger
+                ),
+                makeBookDetailViewModel: { book in
+                    BookDetailViewModel(book: book)
+                },
+                makePlayerViewModel: { book, chapter in
+                    PlayerViewModel(
+                        audiobook: book,
+                        chapter: chapter,
+                        playerService: dependencies.playerService,
+                        nowPlayingService: dependencies.nowPlayingService
+                    )
+                }
+            )
                 .tabItem {
                     Label("Collections", systemImage: "rectangle.stack.fill")
                 }
                 .tag(AppState.Tab.collections)
+
+            UserView(
+                username: dependencies.authStore.session?.username ?? "Unknown",
+                onLogout: {
+                    dependencies.authStore.signOut()
+                }
+            )
+                .tabItem {
+                    Label("User", systemImage: "person.crop.circle")
+                }
+                .tag(AppState.Tab.user)
         }
     }
 }

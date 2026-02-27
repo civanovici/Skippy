@@ -3,9 +3,9 @@ import Observation
 
 @MainActor
 @Observable
-final class LibraryViewModel {
-    var books: [Audiobook] = []
-    var searchResults: [Audiobook] = []
+final class SeriesViewModel {
+    var series: [HomeShelf] = []
+    var searchSeries: [HomeShelf] = []
     var isLoading = false
     var isSearching = false
     var errorMessage: String?
@@ -23,7 +23,7 @@ final class LibraryViewModel {
 
     func load() async {
         guard let session = authStore.session else {
-            books = []
+            series = []
             errorMessage = "You are not signed in."
             return
         }
@@ -33,11 +33,11 @@ final class LibraryViewModel {
         defer { isLoading = false }
 
         do {
-            books = try await apiClient.audiobookshelf.fetchLibrary(session: session)
-            searchResults = []
+            series = try await apiClient.audiobookshelf.fetchSeries(session: session)
+            searchSeries = []
         } catch {
             errorMessage = error.localizedDescription
-            logger.error("Library fetch failed: \(error.localizedDescription)")
+            logger.error("Series fetch failed: \(error.localizedDescription)")
         }
     }
 
@@ -46,14 +46,14 @@ final class LibraryViewModel {
         let requestID = searchRequestID
 
         guard let session = authStore.session else {
-            searchResults = []
+            searchSeries = []
             isSearching = false
             return
         }
 
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            searchResults = []
+            searchSeries = []
             isSearching = false
             return
         }
@@ -65,13 +65,13 @@ final class LibraryViewModel {
             guard requestID == searchRequestID else {
                 return
             }
-            searchResults = result.books
+            searchSeries = result.series
         } catch {
             guard requestID == searchRequestID else {
                 return
             }
-            logger.error("Library search failed: \(error.localizedDescription)")
-            searchResults = []
+            logger.error("Series search failed: \(error.localizedDescription)")
+            searchSeries = []
         }
 
         if requestID == searchRequestID {

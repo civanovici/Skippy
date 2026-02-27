@@ -3,6 +3,10 @@ import Foundation
 protocol AudiobookshelfAPI {
     func login(serverURL: String, username: String, password: String) async throws -> UserSession
     func fetchLibrary(session: UserSession) async throws -> [Audiobook]
+    func fetchPersonalizedShelves(session: UserSession) async throws -> [HomeShelf]
+    func fetchSeries(session: UserSession) async throws -> [HomeShelf]
+    func fetchCollections(session: UserSession) async throws -> [HomeShelf]
+    func search(session: UserSession, query: String) async throws -> SearchResult
 }
 
 struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
@@ -31,9 +35,7 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
     }
 
     func fetchLibrary(session userSession: UserSession) async throws -> [Audiobook] {
-        let libraries: [LibrarySummary] = try await fetchLibraries(session: userSession)
-        let audiobookLibraries = libraries.filter { $0.mediaType == "book" }
-        let targetLibraries = audiobookLibraries.isEmpty ? libraries : audiobookLibraries
+        let targetLibraries = try await targetAudiobookLibraries(session: userSession)
         guard !targetLibraries.isEmpty else {
             return []
         }
@@ -49,6 +51,119 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
         return booksByID.values.sorted {
             $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
         }
+    }
+
+    func fetchPersonalizedShelves(session userSession: UserSession) async throws -> [HomeShelf] {
+        let libraries: [LibrarySummary] = try await fetchLibraries(session: userSession)
+        let audiobookLibrary = libraries.first(where: { $0.mediaType == "book" }) ?? libraries.first
+        guard let libraryID = audiobookLibrary?.id else {
+            return []
+        }
+
+        let request = makeAuthedRequest(
+            userSession.serverURL.appending(path: "/api/libraries/\(libraryID)/personalized"),
+            token: userSession.token
+        )
+
+        let sections: [PersonalizedShelf]
+        do {
+            sections = try await decode(request, expecting: [PersonalizedShelf].self)
+        } catch let error as APIError where error.isAPIMismatchLike {
+            struct Wrapped: Decodable {
+                let results: [PersonalizedShelf]
+            }
+            let wrapped: Wrapped = try await decode(request, expecting: Wrapped.self)
+            sections = wrapped.results
+        }
+
+        return sections.compactMap { section in
+            let mapped = section.entities
+                .filter { ($0.mediaType ?? "book") == "book" }
+                .map { mapAudiobook($0, userSession: userSession) }
+            guard !mapped.isEmpty else {
+                return nil
+            }
+            return HomeShelf(id: section.id, title: section.label, books: mapped)
+        }
+    }
+
+    func fetchSeries(session userSession: UserSession) async throws -> [HomeShelf] {
+        try await fetchGroupedShelves(
+            session: userSession,
+            endpoint: "series"
+        )
+    }
+
+    func fetchCollections(session userSession: UserSession) async throws -> [HomeShelf] {
+        try await fetchGroupedShelves(
+            session: userSession,
+            endpoint: "collections"
+        )
+    }
+
+    func search(session userSession: UserSession, query: String) async throws -> SearchResult {
+        let targetLibraries = try await targetAudiobookLibraries(session: userSession)
+        guard !targetLibraries.isEmpty else {
+            return SearchResult(books: [], series: [])
+        }
+
+        var booksByID: [String: Audiobook] = [:]
+        var seriesByID: [String: HomeShelf] = [:]
+
+        for library in targetLibraries {
+            let paged = try await searchAllPages(libraryID: library.id, query: query, userSession: userSession)
+
+            for item in paged.books where (item.mediaType ?? "book") == "book" {
+                booksByID[item.id] = mapAudiobook(item, userSession: userSession)
+            }
+
+            for entry in paged.series {
+                let mappedBooks = entry.books
+                    .filter { ($0.mediaType ?? "book") == "book" }
+                    .map { mapAudiobook($0, userSession: userSession) }
+                guard !mappedBooks.isEmpty else {
+                    continue
+                }
+
+                if var existing = seriesByID[entry.series.id] {
+                    var seenBookIDs = Set(existing.books.map(\.id))
+                    var mergedBooks = existing.books
+                    for book in mappedBooks where seenBookIDs.insert(book.id).inserted {
+                        mergedBooks.append(book)
+                    }
+                    seriesByID[entry.series.id] = HomeShelf(
+                        id: existing.id,
+                        title: existing.title,
+                        books: mergedBooks
+                    )
+                } else {
+                    seriesByID[entry.series.id] = HomeShelf(
+                        id: entry.series.id,
+                        title: entry.series.name,
+                        books: mappedBooks
+                    )
+                }
+            }
+        }
+
+        let books = booksByID.values.sorted {
+            $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+        }
+        let series = seriesByID.values
+            .map { shelf in
+                HomeShelf(
+                    id: shelf.id,
+                    title: shelf.title,
+                    books: shelf.books.sorted {
+                        $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+                    }
+                )
+            }
+            .sorted {
+                $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+            }
+
+        return SearchResult(books: books, series: series)
     }
 
     private func mapAudiobook(_ item: LibraryItem, userSession: UserSession) -> Audiobook {
@@ -123,14 +238,14 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
         do {
             let wrapped: LibraryItemsResponse = try await decode(request, expecting: LibraryItemsResponse.self)
             return wrapped.results
-        } catch let error as APIError where error == .serverAPIMismatch {
+        } catch let error as APIError where error.isAPIMismatchLike {
             struct Alternate: Decodable {
                 let libraryItems: [LibraryItem]
             }
             do {
                 let alternate: Alternate = try await decode(request, expecting: Alternate.self)
                 return alternate.libraryItems
-            } catch let nested as APIError where nested == .serverAPIMismatch {
+            } catch let nested as APIError where nested.isAPIMismatchLike {
                 return try await decode(request, expecting: [LibraryItem].self)
             }
         }
@@ -144,13 +259,172 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
 
         do {
             return try await decode(request, expecting: [LibrarySummary].self)
-        } catch let error as APIError where error == .serverAPIMismatch {
+        } catch let error as APIError where error.isAPIMismatchLike {
             struct Wrapped: Decodable {
                 let libraries: [LibrarySummary]
             }
             let wrapped: Wrapped = try await decode(request, expecting: Wrapped.self)
             return wrapped.libraries
         }
+    }
+
+    private func fetchGroupedShelves(session userSession: UserSession, endpoint: String) async throws -> [HomeShelf] {
+        let targetLibraries = try await targetAudiobookLibraries(session: userSession)
+        guard !targetLibraries.isEmpty else {
+            return []
+        }
+
+        var shelvesByID: [String: HomeShelf] = [:]
+        for library in targetLibraries {
+            let grouped = try await fetchAllGroupedShelves(
+                libraryID: library.id,
+                endpoint: endpoint,
+                userSession: userSession
+            )
+            var libraryItemsByID: [String: LibraryItem]?
+
+            for section in grouped {
+                var mapped = section.books
+                    .filter { ($0.mediaType ?? "book") == "book" }
+                    .map { mapAudiobook($0, userSession: userSession) }
+
+                if mapped.isEmpty, !section.bookIDs.isEmpty {
+                    if libraryItemsByID == nil {
+                        let items = try await fetchAllLibraryItems(libraryID: library.id, userSession: userSession)
+                        libraryItemsByID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+                    }
+                    mapped = section.bookIDs
+                        .compactMap { libraryItemsByID?[$0] }
+                        .filter { ($0.mediaType ?? "book") == "book" }
+                        .map { mapAudiobook($0, userSession: userSession) }
+                }
+
+                guard !mapped.isEmpty else {
+                    continue
+                }
+
+                if var existing = shelvesByID[section.id] {
+                    var seenBookIDs = Set(existing.books.map(\.id))
+                    var mergedBooks = existing.books
+                    for book in mapped where seenBookIDs.insert(book.id).inserted {
+                        mergedBooks.append(book)
+                    }
+                    shelvesByID[section.id] = HomeShelf(
+                        id: existing.id,
+                        title: existing.title,
+                        books: mergedBooks
+                    )
+                } else {
+                    shelvesByID[section.id] = HomeShelf(id: section.id, title: section.name, books: mapped)
+                }
+            }
+        }
+
+        return shelvesByID.values
+            .map { shelf in
+                HomeShelf(
+                    id: shelf.id,
+                    title: shelf.title,
+                    books: shelf.books.sorted {
+                        $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+                    }
+                )
+            }
+            .sorted {
+                $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+            }
+    }
+
+    private func targetAudiobookLibraries(session userSession: UserSession) async throws -> [LibrarySummary] {
+        let libraries: [LibrarySummary] = try await fetchLibraries(session: userSession)
+        let audiobookLibraries = libraries.filter { $0.mediaType == "book" }
+        return audiobookLibraries.isEmpty ? libraries : audiobookLibraries
+    }
+
+    private func fetchAllGroupedShelves(libraryID: String, endpoint: String, userSession: UserSession) async throws -> [GroupedShelf] {
+        let pageSize = 100
+        let maxPages = 200
+
+        var allShelves: [GroupedShelf] = []
+        var seenEntries: Set<String> = []
+
+        for page in 0..<maxPages {
+            let request = makeAuthedRequest(
+                userSession.serverURL.appending(path: "/api/libraries/\(libraryID)/\(endpoint)"),
+                token: userSession.token,
+                queryItems: [
+                    URLQueryItem(name: "limit", value: "\(pageSize)"),
+                    URLQueryItem(name: "page", value: "\(page)"),
+                ]
+            )
+
+            let wrapped: GroupedShelfResponse = try await decode(request, expecting: GroupedShelfResponse.self)
+            let pageShelves = wrapped.results
+            if pageShelves.isEmpty {
+                break
+            }
+
+            let newShelves = pageShelves.filter { seenEntries.insert(groupedShelfEntryKey($0)).inserted }
+            allShelves.append(contentsOf: newShelves)
+            if newShelves.isEmpty || pageShelves.count < pageSize {
+                break
+            }
+        }
+
+        return allShelves
+    }
+
+    private func searchAllPages(libraryID: String, query: String, userSession: UserSession) async throws -> SearchPages {
+        let pageSize = 50
+        let maxPages = 100
+
+        var allBooks: [LibraryItem] = []
+        var allSeries: [SearchSeriesItem] = []
+        var seenBookIDs: Set<String> = []
+        var seenSeriesEntries: Set<String> = []
+
+        for page in 0..<maxPages {
+            let request = makeAuthedRequest(
+                userSession.serverURL.appending(path: "/api/libraries/\(libraryID)/search"),
+                token: userSession.token,
+                queryItems: [
+                    URLQueryItem(name: "q", value: query),
+                    URLQueryItem(name: "limit", value: "\(pageSize)"),
+                    URLQueryItem(name: "page", value: "\(page)"),
+                ]
+            )
+
+            let response: LibrarySearchResponse = try await decode(request, expecting: LibrarySearchResponse.self)
+            let pageBooks = response.book.compactMap(\.libraryItem)
+            let pageSeries = response.series
+            if pageBooks.isEmpty, pageSeries.isEmpty {
+                break
+            }
+
+            let newBooks = pageBooks.filter { seenBookIDs.insert($0.id).inserted }
+            let newSeries = pageSeries.filter { seenSeriesEntries.insert(searchSeriesEntryKey($0)).inserted }
+
+            allBooks.append(contentsOf: newBooks)
+            allSeries.append(contentsOf: newSeries)
+
+            let pageTotalCount = pageBooks.count + pageSeries.count
+            let newTotalCount = newBooks.count + newSeries.count
+            if newTotalCount == 0 || pageTotalCount < pageSize {
+                break
+            }
+        }
+
+        return SearchPages(books: allBooks, series: allSeries)
+    }
+
+    private func groupedShelfEntryKey(_ shelf: GroupedShelf) -> String {
+        let bookIDs = shelf.books.map(\.id).sorted().joined(separator: ",")
+        return "\(shelf.id)|\(bookIDs)"
+    }
+
+    private func searchSeriesEntryKey(_ series: SearchSeriesItem) -> String {
+        let bookIDs = series.books.map(\.id).sorted().joined(separator: ",")
+        return "\(series.series.id)|\(bookIDs)"
     }
 
     private func makeCoverURL(baseURL: URL, itemID: String, token: String) -> URL? {
@@ -205,10 +479,17 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
 
         do {
             return try JSONDecoder().decode(T.self, from: data)
+        } catch let decodingError as DecodingError {
+            throw APIError.decodingFailed(String(describing: decodingError))
         } catch {
             throw APIError.serverAPIMismatch
         }
     }
+}
+
+private struct SearchPages {
+    let books: [LibraryItem]
+    let series: [SearchSeriesItem]
 }
 
 struct MockAudiobookshelfAPI: AudiobookshelfAPI {
@@ -239,6 +520,47 @@ struct MockAudiobookshelfAPI: AudiobookshelfAPI {
         }
         return Audiobook.mockLibrary
     }
+
+    func fetchPersonalizedShelves(session: UserSession) async throws -> [HomeShelf] {
+        guard !session.token.isEmpty else {
+            throw APIError.unauthorized
+        }
+        return [
+            HomeShelf(id: "recent", title: "Recently Added", books: Array(Audiobook.mockLibrary.prefix(1))),
+            HomeShelf(id: "discover", title: "Discover", books: Audiobook.mockLibrary),
+        ]
+    }
+
+    func fetchSeries(session: UserSession) async throws -> [HomeShelf] {
+        guard !session.token.isEmpty else {
+            throw APIError.unauthorized
+        }
+        return [
+            HomeShelf(id: "series-1", title: "Expeditionary Force", books: Audiobook.mockLibrary),
+        ]
+    }
+
+    func fetchCollections(session: UserSession) async throws -> [HomeShelf] {
+        guard !session.token.isEmpty else {
+            throw APIError.unauthorized
+        }
+        return [
+            HomeShelf(id: "collection-1", title: "Sci-Fi Favorites", books: Audiobook.mockLibrary),
+        ]
+    }
+
+    func search(session: UserSession, query: String) async throws -> SearchResult {
+        guard !session.token.isEmpty else {
+            throw APIError.unauthorized
+        }
+        let filtered = Audiobook.mockLibrary.filter {
+            query.isEmpty || $0.title.localizedCaseInsensitiveContains(query) || $0.author.localizedCaseInsensitiveContains(query)
+        }
+        return SearchResult(
+            books: filtered,
+            series: [HomeShelf(id: "series-1", title: "Expeditionary Force", books: filtered)]
+        )
+    }
 }
 
 enum APIError: LocalizedError, Equatable {
@@ -246,7 +568,17 @@ enum APIError: LocalizedError, Equatable {
     case networkUnreachable
     case invalidCredentials
     case serverAPIMismatch
+    case decodingFailed(String)
     case unauthorized
+
+    var isAPIMismatchLike: Bool {
+        switch self {
+        case .serverAPIMismatch, .decodingFailed:
+            return true
+        default:
+            return false
+        }
+    }
 
     var errorDescription: String? {
         switch self {
@@ -257,6 +589,8 @@ enum APIError: LocalizedError, Equatable {
         case .invalidCredentials:
             return "Invalid credentials."
         case .serverAPIMismatch:
+            return "Server/API mismatch."
+        case .decodingFailed:
             return "Server/API mismatch."
         case .unauthorized:
             return "Unauthorized session."
@@ -347,4 +681,150 @@ private struct LibraryItemChapter: Decodable {
     let title: String?
     let start: TimeInterval?
     let end: TimeInterval?
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case start
+        case end
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        if let stringID = try? container.decodeIfPresent(String.self, forKey: .id) {
+            id = stringID
+        } else if let intID = try? container.decodeIfPresent(Int.self, forKey: .id) {
+            id = String(intID)
+        } else if let doubleID = try? container.decodeIfPresent(Double.self, forKey: .id) {
+            id = String(Int(doubleID))
+        } else {
+            id = nil
+        }
+
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        start = try container.decodeIfPresent(TimeInterval.self, forKey: .start)
+        end = try container.decodeIfPresent(TimeInterval.self, forKey: .end)
+    }
+}
+
+private struct PersonalizedShelf: Decodable {
+    let id: String
+    let label: String
+    let entities: [LibraryItem]
+}
+
+private struct GroupedShelfResponse: Decodable {
+    let results: [GroupedShelf]
+
+    init(from decoder: Decoder) throws {
+        if let container = try? decoder.singleValueContainer(),
+           let direct = try? container.decode([GroupedShelf].self)
+        {
+            results = direct
+            return
+        }
+
+        let keyed = try decoder.container(keyedBy: CodingKeys.self)
+        results = try keyed.decodeIfPresent([GroupedShelf].self, forKey: .results) ?? []
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case results
+    }
+}
+
+private struct GroupedShelf: Decodable {
+    let id: String
+    let name: String
+    let books: [LibraryItem]
+    let bookIDs: [String]
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decodeIfPresent(String.self, forKey: .name)
+            ?? container.decodeIfPresent(String.self, forKey: .label)
+            ?? "Untitled"
+
+        if let directBooks = try? container.decodeIfPresent([LibraryItem].self, forKey: .books) {
+            books = directBooks
+            bookIDs = directBooks.map(\.id)
+            return
+        }
+        if let directItems = try? container.decodeIfPresent([LibraryItem].self, forKey: .libraryItems) {
+            books = directItems
+            bookIDs = directItems.map(\.id)
+            return
+        }
+        if let wrappedBooks = try? container.decodeIfPresent([LibraryItemWrapper].self, forKey: .books) {
+            books = wrappedBooks.compactMap(\.libraryItem)
+            bookIDs = books.map(\.id)
+            return
+        }
+        if let wrappedItems = try? container.decodeIfPresent([LibraryItemWrapper].self, forKey: .libraryItems) {
+            books = wrappedItems.compactMap(\.libraryItem)
+            bookIDs = books.map(\.id)
+            return
+        }
+        if let idBooks = try? container.decodeIfPresent([String].self, forKey: .books) {
+            books = []
+            bookIDs = idBooks
+            return
+        }
+        if let idItems = try? container.decodeIfPresent([String].self, forKey: .libraryItems) {
+            books = []
+            bookIDs = idItems
+            return
+        }
+        books = []
+        bookIDs = []
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case label
+        case books
+        case libraryItems
+    }
+}
+
+private struct LibraryItemWrapper: Decodable {
+    let libraryItem: LibraryItem?
+}
+
+struct SearchResult {
+    let books: [Audiobook]
+    let series: [HomeShelf]
+}
+
+private struct LibrarySearchResponse: Decodable {
+    let book: [SearchBookItem]
+    let series: [SearchSeriesItem]
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        book = try container.decodeIfPresent([SearchBookItem].self, forKey: .book) ?? []
+        series = try container.decodeIfPresent([SearchSeriesItem].self, forKey: .series) ?? []
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case book
+        case series
+    }
+}
+
+private struct SearchBookItem: Decodable {
+    let libraryItem: LibraryItem?
+}
+
+private struct SearchSeriesItem: Decodable {
+    let series: SearchSeries
+    let books: [LibraryItem]
+}
+
+private struct SearchSeries: Decodable {
+    let id: String
+    let name: String
 }
