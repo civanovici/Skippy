@@ -30,14 +30,15 @@ final class AppDependencies {
     }
 
     static func makeMock() -> AppDependencies {
-        AppDependencies(
-            authStore: AuthStore(),
+        let logger = Logger()
+        return AppDependencies(
+            authStore: AuthStore(keychainStore: KeychainStore(), logger: logger),
             apiClient: APIClient(),
             playerService: PlayerService(),
             nowPlayingService: NowPlayingService(),
             downloadManager: DownloadManager(),
             persistenceController: .shared,
-            logger: Logger()
+            logger: logger
         )
     }
 }

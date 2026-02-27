@@ -53,7 +53,7 @@ struct LoginView: View {
     LoginView(
         viewModel: LoginViewModel(
             apiClient: APIClient(),
-            authStore: AuthStore(),
+            authStore: AuthStore(keychainStore: KeychainStore(), logger: Logger()),
             logger: Logger()
         )
     )
