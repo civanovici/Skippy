@@ -32,55 +32,65 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
 
     func fetchLibrary(session userSession: UserSession) async throws -> [Audiobook] {
         let libraries: [LibrarySummary] = try await fetchLibraries(session: userSession)
-        let audiobookLibrary = libraries.first(where: { $0.mediaType == "book" }) ?? libraries.first
-        guard let libraryID = audiobookLibrary?.id else {
+        let audiobookLibraries = libraries.filter { $0.mediaType == "book" }
+        let targetLibraries = audiobookLibraries.isEmpty ? libraries : audiobookLibraries
+        guard !targetLibraries.isEmpty else {
             return []
         }
 
-        let request = makeAuthedRequest(
-            userSession.serverURL.appending(path: "/api/libraries/\(libraryID)/items"),
-            token: userSession.token,
-            queryItems: [
-                URLQueryItem(name: "minified", value: "1"),
-                URLQueryItem(name: "limit", value: "1000"),
-            ]
-        )
+        var booksByID: [String: Audiobook] = [:]
+        for library in targetLibraries {
+            let request = makeAuthedRequest(
+                userSession.serverURL.appending(path: "/api/libraries/\(library.id)/items"),
+                token: userSession.token,
+                queryItems: [
+                    URLQueryItem(name: "minified", value: "1"),
+                    URLQueryItem(name: "limit", value: "1000"),
+                ]
+            )
 
-        let items = try await fetchLibraryItems(request: request)
-        return items
-            .filter { ($0.mediaType ?? "book") == "book" }
-            .map { item in
-                let title = item.media?.metadata?.title ?? item.media?.title ?? "Untitled"
-                let author = item.media?.metadata?.authorName
-                    ?? item.media?.metadata?.authors?.first?.name
-                    ?? "Unknown Author"
-
-                let chapters = (item.media?.chapters ?? []).enumerated().map { index, chapter in
-                    let id = chapter.id ?? "\(item.id)-ch-\(index)"
-                    let start = chapter.start ?? 0
-                    let end = chapter.end ?? start
-                    let chapterTitle = chapter.title?.trimmingCharacters(in: .whitespacesAndNewlines)
-                    return Chapter(
-                        id: id,
-                        title: (chapterTitle?.isEmpty == false ? chapterTitle : nil) ?? "Chapter \(index + 1)",
-                        duration: max(end - start, 0)
-                    )
-                }
-
-                let progress = item.userMediaProgress?.progress
-                    ?? item.mediaProgress?.progress
-                    ?? item.progress
-                    ?? 0
-
-                return Audiobook(
-                    id: item.id,
-                    title: title,
-                    author: author,
-                    progress: min(max(progress, 0), 1),
-                    coverURL: makeCoverURL(baseURL: userSession.serverURL, itemID: item.id, token: userSession.token),
-                    chapters: chapters
-                )
+            let items = try await fetchLibraryItems(request: request)
+            for item in items where (item.mediaType ?? "book") == "book" {
+                booksByID[item.id] = mapAudiobook(item, userSession: userSession)
             }
+        }
+
+        return booksByID.values.sorted {
+            $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+        }
+    }
+
+    private func mapAudiobook(_ item: LibraryItem, userSession: UserSession) -> Audiobook {
+        let title = item.media?.metadata?.title ?? item.media?.title ?? "Untitled"
+        let author = item.media?.metadata?.authorName
+            ?? item.media?.metadata?.authors?.first?.name
+            ?? "Unknown Author"
+
+        let chapters = (item.media?.chapters ?? []).enumerated().map { index, chapter in
+            let id = chapter.id ?? "\(item.id)-ch-\(index)"
+            let start = chapter.start ?? 0
+            let end = chapter.end ?? start
+            let chapterTitle = chapter.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return Chapter(
+                id: id,
+                title: (chapterTitle?.isEmpty == false ? chapterTitle : nil) ?? "Chapter \(index + 1)",
+                duration: max(end - start, 0)
+            )
+        }
+
+        let progress = item.userMediaProgress?.progress
+            ?? item.mediaProgress?.progress
+            ?? item.progress
+            ?? 0
+
+        return Audiobook(
+            id: item.id,
+            title: title,
+            author: author,
+            progress: min(max(progress, 0), 1),
+            coverURL: makeCoverURL(baseURL: userSession.serverURL, itemID: item.id, token: userSession.token),
+            chapters: chapters
+        )
     }
 
     private func fetchLibraryItems(request: URLRequest) async throws -> [LibraryItem] {
