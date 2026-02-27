@@ -127,10 +127,15 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
 
                 if var existing = seriesByID[entry.series.id] {
                     var seenBookIDs = Set(existing.books.map(\.id))
+                    var mergedBooks = existing.books
                     for book in mappedBooks where seenBookIDs.insert(book.id).inserted {
-                        existing.books.append(book)
+                        mergedBooks.append(book)
                     }
-                    seriesByID[entry.series.id] = existing
+                    seriesByID[entry.series.id] = HomeShelf(
+                        id: existing.id,
+                        title: existing.title,
+                        books: mergedBooks
+                    )
                 } else {
                     seriesByID[entry.series.id] = HomeShelf(
                         id: entry.series.id,
@@ -287,10 +292,15 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
 
                 if var existing = shelvesByID[section.id] {
                     var seenBookIDs = Set(existing.books.map(\.id))
+                    var mergedBooks = existing.books
                     for book in mapped where seenBookIDs.insert(book.id).inserted {
-                        existing.books.append(book)
+                        mergedBooks.append(book)
                     }
-                    shelvesByID[section.id] = existing
+                    shelvesByID[section.id] = HomeShelf(
+                        id: existing.id,
+                        title: existing.title,
+                        books: mergedBooks
+                    )
                 } else {
                     shelvesByID[section.id] = HomeShelf(id: section.id, title: section.name, books: mapped)
                 }
