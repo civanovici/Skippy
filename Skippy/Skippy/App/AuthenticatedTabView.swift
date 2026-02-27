@@ -15,7 +15,12 @@ struct AuthenticatedTabView: View {
                     logger: dependencies.logger
                 ),
                 makeBookDetailViewModel: { book in
-                    BookDetailViewModel(book: book)
+                    BookDetailViewModel(
+                        book: book,
+                        apiClient: dependencies.apiClient,
+                        authStore: dependencies.authStore,
+                        logger: dependencies.logger
+                    )
                 },
                 makePlayerViewModel: { book, chapter in
                     PlayerViewModel(
@@ -38,7 +43,12 @@ struct AuthenticatedTabView: View {
                     logger: dependencies.logger
                 ),
                 makeBookDetailViewModel: { book in
-                    BookDetailViewModel(book: book)
+                    BookDetailViewModel(
+                        book: book,
+                        apiClient: dependencies.apiClient,
+                        authStore: dependencies.authStore,
+                        logger: dependencies.logger
+                    )
                 },
                 makePlayerViewModel: { book, chapter in
                     PlayerViewModel(
@@ -61,7 +71,12 @@ struct AuthenticatedTabView: View {
                     logger: dependencies.logger
                 ),
                 makeBookDetailViewModel: { book in
-                    BookDetailViewModel(book: book)
+                    BookDetailViewModel(
+                        book: book,
+                        apiClient: dependencies.apiClient,
+                        authStore: dependencies.authStore,
+                        logger: dependencies.logger
+                    )
                 },
                 makePlayerViewModel: { book, chapter in
                     PlayerViewModel(
@@ -84,7 +99,12 @@ struct AuthenticatedTabView: View {
                     logger: dependencies.logger
                 ),
                 makeBookDetailViewModel: { book in
-                    BookDetailViewModel(book: book)
+                    BookDetailViewModel(
+                        book: book,
+                        apiClient: dependencies.apiClient,
+                        authStore: dependencies.authStore,
+                        logger: dependencies.logger
+                    )
                 },
                 makePlayerViewModel: { book, chapter in
                     PlayerViewModel(
