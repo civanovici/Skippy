@@ -10,6 +10,9 @@ struct SkippyApp: App {
             RootView()
                 .environment(dependencies)
                 .environment(appState)
+                .task {
+                    dependencies.authStore.restoreSessionIfNeeded()
+                }
         }
     }
 }

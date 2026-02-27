@@ -12,6 +12,9 @@ struct RootView: View {
                         authStore: dependencies.authStore,
                         logger: dependencies.logger
                     ),
+                    onLogout: {
+                        dependencies.authStore.signOut()
+                    },
                     makeBookDetailViewModel: { book in
                         BookDetailViewModel(book: book)
                     },

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct LibraryView: View {
     @State var viewModel: LibraryViewModel
+    let onLogout: () -> Void
 
     let makeBookDetailViewModel: (Audiobook) -> BookDetailViewModel
     let makePlayerViewModel: (Audiobook, Chapter?) -> PlayerViewModel
@@ -39,6 +40,13 @@ struct LibraryView: View {
                 }
             }
             .navigationTitle("Library")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Logout", role: .destructive) {
+                        onLogout()
+                    }
+                }
+            }
             .task {
                 await viewModel.load()
             }
@@ -52,6 +60,7 @@ struct LibraryView: View {
 #Preview {
     LibraryView(
         viewModel: LibraryViewModel(apiClient: APIClient(), authStore: AuthStore.previewAuthenticated, logger: Logger()),
+        onLogout: {},
         makeBookDetailViewModel: { BookDetailViewModel(book: $0) },
         makePlayerViewModel: { book, chapter in
             PlayerViewModel(audiobook: book, chapter: chapter, playerService: PlayerService(), nowPlayingService: NowPlayingService())

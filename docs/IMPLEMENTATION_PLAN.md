@@ -118,18 +118,18 @@ Goal: Let user connect to an Audiobookshelf server and persist session.
 
 ### Checkpoints
 
-- [ ] Implement login form (URL, username, password)
-- [ ] URL validation (basic format + scheme handling)
-- [ ] Add `APIClient` login request
-- [ ] Parse/store auth session/token
-- [ ] Persist credentials/session secrets in Keychain
-- [ ] Restore prior session on app launch
-- [ ] Show error states:
-  - [ ] Invalid URL
-  - [ ] Network unreachable
-  - [ ] Invalid credentials
-  - [ ] Server/API mismatch
-- [ ] Add logout flow (basic)
+- [x] Implement login form (URL, username, password)
+- [x] URL validation (basic format + scheme handling)
+- [x] Add `APIClient` login request
+- [x] Parse/store auth session/token
+- [x] Persist credentials/session secrets in Keychain
+- [x] Restore prior session on app launch
+- [x] Show error states:
+  - [x] Invalid URL
+  - [x] Network unreachable
+  - [x] Invalid credentials
+  - [x] Server/API mismatch
+- [x] Add logout flow (basic)
 
 ### Exit Criteria
 

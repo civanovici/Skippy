@@ -46,6 +46,8 @@ Codex code review is required by default before each commit and before each push
 - Request review: `review staged changes`
 - Only commit after review issues are resolved or explicitly accepted
 - Before pushing, request a final review of the branch diff against `origin/main`
+- Run tests before each commit (`xcodebuild ... test` for relevant targets/schemes)
+- If tests cannot run, explicitly record the reason in the commit/PR notes
 
 If no staged diff exists, do not commit.
 
