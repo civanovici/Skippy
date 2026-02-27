@@ -42,15 +42,14 @@ Prioritize coverage for auth/session handling, API parsing, playback state, and 
 
 ## Agent Review Workflow
 
-Codex code review is required by default before each commit and before each push.
+Codex must always run code review and tests before every commit and push, automatically, without asking the user.
 
-- Stage changes first: `git add ...`
-- Request review: `review staged changes`
-- Only commit after review issues are resolved or explicitly accepted
-- Before pushing, request a final review of the branch diff against `origin/main`
-- Run tests before each commit (`xcodebuild ... test` for relevant targets/schemes)
-- Prefer `./scripts/precommit.sh` before commit and `./scripts/prepush.sh` before push
-- If tests cannot run, explicitly record the reason in the commit/PR notes
+- Review the pending/staged diff before each commit
+- Resolve review findings (or explicitly document accepted risk) before committing
+- Run `./scripts/precommit.sh` before each commit
+- Run `./scripts/prepush.sh` before each push
+- If tests cannot run, record the reason in commit/PR notes and call it out in the handoff
+- Do not skip review/tests because the user forgot to ask
 
 If no staged diff exists, do not commit.
 
