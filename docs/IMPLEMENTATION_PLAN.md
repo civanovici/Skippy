@@ -1,0 +1,362 @@
+# Skippy Implementation Plan (MVP)
+
+This document breaks the MVP into concrete phases with checkpoints so progress is easy to track and review.
+
+## Progress Tracking
+
+Status legend:
+
+- `[ ]` Not started
+- `[-]` In progress
+- `[x]` Done
+- `[!]` Blocked
+
+## MVP Summary (Locked Decisions)
+
+- iOS target: `17+`
+- Single Audiobookshelf server/account for MVP
+- Login-only (existing Audiobookshelf account)
+- Simple/native UI
+- Streaming over Wi-Fi + cellular
+- Ask cellular streaming preference on first launch
+- Streaming + offline downloads + background playback
+
+## Phase 0: Project Setup (Foundation)
+
+Goal: Create a buildable iOS app skeleton with the right capabilities and architecture seams.
+
+### Checkpoints
+
+- [x] Create branch `codex/ios-init`
+- [x] Create Xcode project (`Skippy`) with:
+  - [x] iOS app target (SwiftUI)
+  - [x] Unit test target
+  - [x] UI test target
+- [x] Set deployment target to iOS 17+
+- [x] Configure bundle identifier and signing placeholders
+- [x] Enable Background Modes capability:
+  - [x] Audio, AirPlay, Picture in Picture
+- [x] Add app icon placeholders / assets scaffold
+- [x] Add project folder structure (see Architecture Skeleton below)
+- [x] App launches to a placeholder root screen
+
+### Exit Criteria
+
+- App builds and runs on simulator
+- App launches without runtime errors
+- Git commit created for project skeleton
+
+## Phase 1: Architecture Skeleton (No Real Networking Yet)
+
+Goal: Create the core modules/services as compilable stubs so features can be built incrementally.
+
+### Architecture Skeleton (Suggested)
+
+- `Skippy/App/`
+  - `SkippyApp.swift`
+  - `AppState.swift`
+  - `RootView.swift`
+- `Skippy/Features/Auth/`
+  - `LoginView.swift`
+  - `LoginViewModel.swift`
+- `Skippy/Features/Library/`
+  - `LibraryView.swift`
+  - `LibraryViewModel.swift`
+- `Skippy/Features/BookDetail/`
+  - `BookDetailView.swift`
+  - `BookDetailViewModel.swift`
+- `Skippy/Features/Player/`
+  - `PlayerView.swift`
+  - `PlayerViewModel.swift`
+- `Skippy/Services/API/`
+  - `APIClient.swift`
+  - `AudiobookshelfAPI.swift`
+- `Skippy/Services/Auth/`
+  - `AuthStore.swift`
+  - `KeychainStore.swift`
+- `Skippy/Services/Playback/`
+  - `PlayerService.swift`
+  - `NowPlayingService.swift`
+- `Skippy/Services/Downloads/`
+  - `DownloadManager.swift`
+- `Skippy/Services/Persistence/`
+  - `PersistenceController.swift`
+- `Skippy/Models/`
+  - `UserSession.swift`
+  - `Audiobook.swift`
+  - `Chapter.swift`
+  - `PlaybackProgress.swift`
+  - `DownloadRecord.swift`
+- `Skippy/Support/`
+  - `Config.swift`
+  - `Logger.swift`
+
+### Checkpoints
+
+- [ ] Define app navigation flow (`unauthenticated -> library -> player/detail`)
+- [ ] Add dependency container / service wiring
+- [ ] Add model stubs and mock data
+- [ ] Add protocol-based interfaces for API, playback, downloads
+- [ ] Root view switches between login and library based on auth state
+- [ ] Project compiles with all stubs in place
+
+### Exit Criteria
+
+- Clear compile-time seams for networking/playback/downloads
+- Can demo navigation with mock data only
+
+## Phase 2: Authentication + Server Connection (First Vertical Slice)
+
+Goal: Let user connect to an Audiobookshelf server and persist session.
+
+### User-Facing Scope
+
+- Enter server URL, username, password
+- Login to remote Audiobookshelf server
+- Handle errors clearly
+- Save session securely
+
+### Checkpoints
+
+- [ ] Implement login form (URL, username, password)
+- [ ] URL validation (basic format + scheme handling)
+- [ ] Add `APIClient` login request
+- [ ] Parse/store auth session/token
+- [ ] Persist credentials/session secrets in Keychain
+- [ ] Restore prior session on app launch
+- [ ] Show error states:
+  - [ ] Invalid URL
+  - [ ] Network unreachable
+  - [ ] Invalid credentials
+  - [ ] Server/API mismatch
+- [ ] Add logout flow (basic)
+
+### Exit Criteria
+
+- Successful login against a real Audiobookshelf server
+- App reopens without requiring login again (if session valid)
+
+## Phase 3: Library Browsing (Real Data)
+
+Goal: Show the user’s audiobook library from Audiobookshelf.
+
+### User-Facing Scope
+
+- Library list with title/author/cover/progress
+- Pull to refresh
+- Open book details
+
+### Checkpoints
+
+- [ ] Add library fetch API call(s)
+- [ ] Map API response to app models
+- [ ] Build library list UI
+- [ ] Cover image loading/caching strategy (basic)
+- [ ] Pull-to-refresh
+- [ ] Empty state UI
+- [ ] Error state + retry UI
+- [ ] Navigate to book detail
+- [ ] Optional (if low effort): search/filter
+
+### Exit Criteria
+
+- Authenticated user can browse actual library and open a book detail screen
+
+## Phase 4: Book Detail + Streaming Playback
+
+Goal: Start listening from the app with reliable streaming playback.
+
+### User-Facing Scope
+
+- Book details and chapter list
+- Play/resume
+- Seek/scrub
+- Playback speed
+
+### Checkpoints
+
+- [ ] Book detail API/data loading
+- [ ] Chapter/track list UI
+- [ ] Implement `PlayerService` using `AVPlayer`/`AVFoundation`
+- [ ] Start stream playback from beginning
+- [ ] Resume playback from saved position
+- [ ] Seek forward/back controls
+- [ ] Playback speed controls (`1x`, `1.25x`, `1.5x`, `2x`)
+- [ ] Scrubber and time display
+- [ ] Basic buffering/loading state UI
+- [ ] Handle network playback failure + retry
+
+### Exit Criteria
+
+- User can stream a book end-to-end in foreground with stable controls
+
+## Phase 5: Background Playback + Lock Screen Controls
+
+Goal: Playback continues when screen locks/backgrounds and integrates with iOS media controls.
+
+### User-Facing Scope
+
+- Continue playback with phone locked
+- Control playback from lock screen / Control Center / headphones
+- Show now playing metadata/artwork
+
+### Checkpoints
+
+- [ ] Configure `AVAudioSession` for playback
+- [ ] Confirm Background Modes capability works in build
+- [ ] Add `NowPlayingService` with metadata updates
+- [ ] Integrate `MPNowPlayingInfoCenter`
+- [ ] Integrate `MPRemoteCommandCenter`
+- [ ] Support play/pause/seek remote commands
+- [ ] Handle audio interruptions (calls/Siri/alarms)
+- [ ] Handle route changes (Bluetooth/headphones disconnect)
+
+### Exit Criteria
+
+- Locking the phone does not stop audiobook playback
+- System media controls control the app reliably
+
+## Phase 6: Offline Downloads (Core MVP)
+
+Goal: Download audiobooks locally and play them without network connectivity.
+
+### User-Facing Scope
+
+- Download audiobook
+- View download state/progress
+- Play offline
+- Delete download
+
+### Checkpoints
+
+- [ ] Define download storage layout (per book)
+- [ ] Implement `DownloadManager` state machine:
+  - [ ] queued
+  - [ ] downloading
+  - [ ] paused
+  - [ ] completed
+  - [ ] failed
+- [ ] Implement authenticated download requests
+- [ ] Persist download records across app restarts
+- [ ] Mark books as offline-ready
+- [ ] Prefer local media when available
+- [ ] Delete local download + cleanup metadata
+- [ ] UI for download actions/status
+- [ ] Airplane mode validation flow
+
+### Exit Criteria
+
+- User can download at least one book and play fully offline
+
+## Phase 7: Playback Progress Persistence + Sync
+
+Goal: Preserve progress locally and sync to Audiobookshelf when possible.
+
+### User-Facing Scope
+
+- Resume where user left off
+- Progress survives app restarts
+- Syncs to server when online
+
+### Checkpoints
+
+- [ ] Persist local progress updates while playing
+- [ ] Throttle/debounce progress writes to avoid excessive I/O
+- [ ] Restore progress on app relaunch
+- [ ] Implement progress sync API call(s)
+- [ ] Queue failed sync attempts for retry
+- [ ] Timestamp-based conflict handling (most recent wins)
+- [ ] Visual confirmation (subtle progress indicators)
+
+### Exit Criteria
+
+- Progress resumes correctly after app restart and syncs after reconnecting
+
+## Phase 8: Settings + Onboarding Preferences (MVP Polish)
+
+Goal: Capture user preferences and expose basic controls needed for daily use.
+
+### User-Facing Scope
+
+- First-launch preference prompt for cellular streaming
+- Settings screen for server/session and playback/network options
+
+### Checkpoints
+
+- [ ] First-launch prompt for cellular streaming preference
+- [ ] Persist preference locally
+- [ ] Settings screen scaffold
+- [ ] Toggle for cellular streaming on/off
+- [ ] Logout button
+- [ ] Server info / current connection display
+- [ ] Optional: skip interval setting (15s/30s)
+
+### Exit Criteria
+
+- User can control cellular streaming behavior after onboarding
+
+## Phase 9: Testing, Stability, and Release Readiness (MVP)
+
+Goal: Reduce regressions and validate critical flows.
+
+### Test Priorities
+
+- Auth success/failure
+- Library load/error
+- Playback start/seek/resume
+- Background playback
+- Download + offline playback
+- Progress persistence/sync retry
+
+### Checkpoints
+
+- [ ] Unit tests for parsing/models/view models
+- [ ] Unit tests for auth/session handling
+- [ ] Unit tests for progress conflict logic
+- [ ] UI smoke tests for login -> library flow
+- [ ] Manual test checklist created
+- [ ] Test on:
+  - [ ] Simulator
+  - [ ] Physical iPhone (strongly recommended for audio/background behavior)
+- [ ] Crash/error logging strategy (local logs minimum)
+- [ ] Beta readiness checklist (TestFlight prep)
+
+### Exit Criteria
+
+- Critical flows pass manual checklist on device
+- No blocker bugs for MVP use case
+
+## Suggested Git Checkpoint Commits
+
+These are recommended commit boundaries to keep progress easy to review:
+
+- [ ] `chore: create iOS app project skeleton`
+- [ ] `feat: add app architecture and service stubs`
+- [ ] `feat: implement Audiobookshelf login and session persistence`
+- [ ] `feat: load and display audiobook library`
+- [ ] `feat: add streaming playback controls`
+- [ ] `feat: enable background playback and lock screen controls`
+- [ ] `feat: add offline downloads`
+- [ ] `feat: persist and sync playback progress`
+- [ ] `feat: add settings and first-launch cellular preference`
+- [ ] `test: add MVP smoke tests and manual checklist`
+
+## Risks / Blockers Tracker
+
+Use this section to log issues as they appear.
+
+### Current Known Risks
+
+- Xcode simulator/runtime install may delay initial project generation/testing
+- Audiobookshelf API details may require adjustments after first integration
+- Background downloads may be constrained by auth/token behavior
+
+### Active Blockers
+
+- [ ] None currently
+
+## Current Next Step
+
+- Wait for Xcode simulator/runtime install to finish
+- Create branch `codex/ios-init`
+- Generate Xcode project and Phase 0/1 skeleton
