@@ -286,6 +286,97 @@ struct SkippyTests {
     }
 
     @Test
+    func fetchCollectionsSupportsBookIDArrays() async throws {
+        let session = makeSession { request in
+            let path = request.url?.path ?? ""
+            let query = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            let page = Int(query.first(where: { $0.name == "page" })?.value ?? "0") ?? 0
+
+            if path == "/api/libraries" {
+                return ok(request.url!, #"{"libraries":[{"id":"lib-a","mediaType":"book"}]}"#)
+            }
+            if path == "/api/libraries/lib-a/collections", page == 0 {
+                let payload = """
+                {
+                  "results":[
+                    {"id":"collection-3","name":"By IDs","books":["c3"]}
+                  ]
+                }
+                """
+                return ok(request.url!, payload)
+            }
+            if path == "/api/libraries/lib-a/items", page == 0 {
+                let payload = """
+                {
+                  "results":[
+                    {"id":"c3","mediaType":"book","media":{"metadata":{"title":"Children of Time","authorName":"Adrian Tchaikovsky"}}}
+                  ]
+                }
+                """
+                return ok(request.url!, payload)
+            }
+            return ok(request.url!, #"{"results":[]}"#)
+        }
+
+        let api = AudiobookshelfHTTPAPI(session: session)
+        let collections = try await api.fetchCollections(session: UserSession(
+            serverURL: URL(string: "http://example.test:1234")!,
+            username: "u",
+            token: "tkn"
+        ))
+
+        #expect(collections.count == 1)
+        #expect(collections[0].title == "By IDs")
+        #expect(collections[0].books.map(\.title) == ["Children of Time"])
+    }
+
+    @Test
+    func fetchCollectionsSupportsNumericChapterIDs() async throws {
+        let session = makeSession { request in
+            let path = request.url?.path ?? ""
+            if path == "/api/libraries" {
+                return ok(request.url!, #"{"libraries":[{"id":"lib-a","mediaType":"book"}]}"#)
+            }
+            if path == "/api/libraries/lib-a/collections" {
+                let payload = """
+                {
+                  "results":[
+                    {
+                      "id":"collection-4",
+                      "name":"Numeric Chapter IDs",
+                      "books":[
+                        {
+                          "id":"c4",
+                          "mediaType":"book",
+                          "media":{
+                            "metadata":{"title":"Project Hail Mary","authorName":"Andy Weir"},
+                            "chapters":[{"id":1,"title":"Chapter 1","start":0,"end":12.5}]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+                """
+                return ok(request.url!, payload)
+            }
+            return ok(request.url!, #"{"results":[]}"#)
+        }
+
+        let api = AudiobookshelfHTTPAPI(session: session)
+        let collections = try await api.fetchCollections(session: UserSession(
+            serverURL: URL(string: "http://example.test:1234")!,
+            username: "u",
+            token: "tkn"
+        ))
+
+        #expect(collections.count == 1)
+        #expect(collections[0].books.count == 1)
+        #expect(collections[0].books[0].chapters.count == 1)
+        #expect(collections[0].books[0].chapters[0].id == "1")
+    }
+
+    @Test
     func searchMapsBooksAndSeries() async throws {
         let session = makeSession { request in
             let path = request.url?.path ?? ""

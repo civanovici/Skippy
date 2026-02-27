@@ -281,11 +281,24 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
                 endpoint: endpoint,
                 userSession: userSession
             )
+            var libraryItemsByID: [String: LibraryItem]?
 
             for section in grouped {
-                let mapped = section.books
+                var mapped = section.books
                     .filter { ($0.mediaType ?? "book") == "book" }
                     .map { mapAudiobook($0, userSession: userSession) }
+
+                if mapped.isEmpty, !section.bookIDs.isEmpty {
+                    if libraryItemsByID == nil {
+                        let items = try await fetchAllLibraryItems(libraryID: library.id, userSession: userSession)
+                        libraryItemsByID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+                    }
+                    mapped = section.bookIDs
+                        .compactMap { libraryItemsByID?[$0] }
+                        .filter { ($0.mediaType ?? "book") == "book" }
+                        .map { mapAudiobook($0, userSession: userSession) }
+                }
+
                 guard !mapped.isEmpty else {
                     continue
                 }
@@ -668,6 +681,31 @@ private struct LibraryItemChapter: Decodable {
     let title: String?
     let start: TimeInterval?
     let end: TimeInterval?
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case start
+        case end
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        if let stringID = try? container.decodeIfPresent(String.self, forKey: .id) {
+            id = stringID
+        } else if let intID = try? container.decodeIfPresent(Int.self, forKey: .id) {
+            id = String(intID)
+        } else if let doubleID = try? container.decodeIfPresent(Double.self, forKey: .id) {
+            id = String(Int(doubleID))
+        } else {
+            id = nil
+        }
+
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        start = try container.decodeIfPresent(TimeInterval.self, forKey: .start)
+        end = try container.decodeIfPresent(TimeInterval.self, forKey: .end)
+    }
 }
 
 private struct PersonalizedShelf: Decodable {
@@ -700,6 +738,7 @@ private struct GroupedShelf: Decodable {
     let id: String
     let name: String
     let books: [LibraryItem]
+    let bookIDs: [String]
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -708,23 +747,38 @@ private struct GroupedShelf: Decodable {
             ?? container.decodeIfPresent(String.self, forKey: .label)
             ?? "Untitled"
 
-        if let directBooks = try container.decodeIfPresent([LibraryItem].self, forKey: .books) {
+        if let directBooks = try? container.decodeIfPresent([LibraryItem].self, forKey: .books) {
             books = directBooks
+            bookIDs = directBooks.map(\.id)
             return
         }
-        if let directItems = try container.decodeIfPresent([LibraryItem].self, forKey: .libraryItems) {
+        if let directItems = try? container.decodeIfPresent([LibraryItem].self, forKey: .libraryItems) {
             books = directItems
+            bookIDs = directItems.map(\.id)
             return
         }
-        if let wrappedBooks = try container.decodeIfPresent([LibraryItemWrapper].self, forKey: .books) {
+        if let wrappedBooks = try? container.decodeIfPresent([LibraryItemWrapper].self, forKey: .books) {
             books = wrappedBooks.compactMap(\.libraryItem)
+            bookIDs = books.map(\.id)
             return
         }
-        if let wrappedItems = try container.decodeIfPresent([LibraryItemWrapper].self, forKey: .libraryItems) {
+        if let wrappedItems = try? container.decodeIfPresent([LibraryItemWrapper].self, forKey: .libraryItems) {
             books = wrappedItems.compactMap(\.libraryItem)
+            bookIDs = books.map(\.id)
+            return
+        }
+        if let idBooks = try? container.decodeIfPresent([String].self, forKey: .books) {
+            books = []
+            bookIDs = idBooks
+            return
+        }
+        if let idItems = try? container.decodeIfPresent([String].self, forKey: .libraryItems) {
+            books = []
+            bookIDs = idItems
             return
         }
         books = []
+        bookIDs = []
     }
 
     private enum CodingKeys: String, CodingKey {
