@@ -91,3 +91,16 @@ No special Tailscale integration is required in-app if the network path is alrea
 4. Implement API client and authentication
 5. Implement playback engine + background audio
 6. Add offline downloads and sync
+
+## Local Quality Gates
+
+This repo includes no-API local automation for repetitive checks.
+
+- Enable Git hooks once:
+  - `./scripts/setup_hooks.sh`
+- Manual pre-commit gate:
+  - `./scripts/precommit.sh`
+- Manual pre-push gate:
+  - `./scripts/prepush.sh`
+
+CI also runs build + unit tests on pull requests (`.github/workflows/ios-ci.yml`).
