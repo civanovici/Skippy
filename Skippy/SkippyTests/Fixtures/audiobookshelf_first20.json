@@ -1,0 +1,207 @@
+{
+  "generatedAt": "2026-02-27T13:14:12Z",
+  "server": "http://192.168.0.122:13378",
+  "libraryId": "39533cfa-c370-4725-a596-1aefe7ef7e84",
+  "items": [
+    {
+      "id": "4837d63b-1b68-424f-b98c-f618617b31d4",
+      "title": "Starry Messenger: Cosmic Perspectives on Civilization",
+      "author": "Neil deGrasse Tyson",
+      "coverPath": "/metadata/items/4837d63b-1b68-424f-b98c-f618617b31d4/cover.jpg",
+      "coverURL": "/api/items/4837d63b-1b68-424f-b98c-f618617b31d4/cover",
+      "progress": 0,
+      "coverWidth": 400,
+      "coverHeight": 400
+    },
+    {
+      "id": "548a1cf8-b453-42fd-ab3d-9d385b0722d3",
+      "title": "Hidden Empire",
+      "author": "Kevin J. Anderson",
+      "coverPath": "/metadata/items/548a1cf8-b453-42fd-ab3d-9d385b0722d3/cover.jpg",
+      "coverURL": "/api/items/548a1cf8-b453-42fd-ab3d-9d385b0722d3/cover",
+      "progress": 0,
+      "coverWidth": 400,
+      "coverHeight": 563
+    },
+    {
+      "id": "e517f6b8-d7c5-4b56-8795-6a8ef46e7183",
+      "title": "The Age of Voltaire",
+      "author": "Will Durant",
+      "coverPath": null,
+      "coverURL": "/api/items/e517f6b8-d7c5-4b56-8795-6a8ef46e7183/cover",
+      "progress": 0,
+      "coverWidth": null,
+      "coverHeight": null
+    },
+    {
+      "id": "87395daa-979c-4506-8789-cd43f16a3bd6",
+      "title": "The Age of Reason Begins",
+      "author": "Will Durant",
+      "coverPath": null,
+      "coverURL": "/api/items/87395daa-979c-4506-8789-cd43f16a3bd6/cover",
+      "progress": 0,
+      "coverWidth": null,
+      "coverHeight": null
+    },
+    {
+      "id": "f0b6c94a-68cb-4ce6-b035-406c4f738cb6",
+      "title": "Rousseau and Revolution",
+      "author": "Will Durant",
+      "coverPath": null,
+      "coverURL": "/api/items/f0b6c94a-68cb-4ce6-b035-406c4f738cb6/cover",
+      "progress": 0,
+      "coverWidth": null,
+      "coverHeight": null
+    },
+    {
+      "id": "221421be-5615-4a45-8b39-fab8ff3139c0",
+      "title": "The Age of Napolean",
+      "author": "Will Durant",
+      "coverPath": null,
+      "coverURL": "/api/items/221421be-5615-4a45-8b39-fab8ff3139c0/cover",
+      "progress": 0,
+      "coverWidth": null,
+      "coverHeight": null
+    },
+    {
+      "id": "6d2d65c8-672d-4f0b-ae53-6ca259949302",
+      "title": "Our Oriental Heritage",
+      "author": "Will Durant",
+      "coverPath": null,
+      "coverURL": "/api/items/6d2d65c8-672d-4f0b-ae53-6ca259949302/cover",
+      "progress": 0,
+      "coverWidth": null,
+      "coverHeight": null
+    },
+    {
+      "id": "3ce9585d-a1b1-4875-bb5b-572b61ba0756",
+      "title": "The Age of Faith",
+      "author": "Will Durant",
+      "coverPath": null,
+      "coverURL": "/api/items/3ce9585d-a1b1-4875-bb5b-572b61ba0756/cover",
+      "progress": 0,
+      "coverWidth": null,
+      "coverHeight": null
+    },
+    {
+      "id": "7e458b23-5ff2-4149-889a-ddb266bb4529",
+      "title": "The Renaissance",
+      "author": "Will Durant",
+      "coverPath": null,
+      "coverURL": "/api/items/7e458b23-5ff2-4149-889a-ddb266bb4529/cover",
+      "progress": 0,
+      "coverWidth": null,
+      "coverHeight": null
+    },
+    {
+      "id": "2e4bbb25-31aa-4a3a-badc-8ff8db5b3ed7",
+      "title": "Caeser and Christ",
+      "author": "Will Durant",
+      "coverPath": null,
+      "coverURL": "/api/items/2e4bbb25-31aa-4a3a-badc-8ff8db5b3ed7/cover",
+      "progress": 0,
+      "coverWidth": null,
+      "coverHeight": null
+    },
+    {
+      "id": "d70edc36-c74a-4c24-a1a3-41fe79cddab5",
+      "title": "The Age of Louis XIV",
+      "author": "Will Durant",
+      "coverPath": null,
+      "coverURL": "/api/items/d70edc36-c74a-4c24-a1a3-41fe79cddab5/cover",
+      "progress": 0,
+      "coverWidth": null,
+      "coverHeight": null
+    },
+    {
+      "id": "82d76331-ff96-4393-917a-86daf38b730e",
+      "title": "The Reformation",
+      "author": "Will Durant",
+      "coverPath": null,
+      "coverURL": "/api/items/82d76331-ff96-4393-917a-86daf38b730e/cover",
+      "progress": 0,
+      "coverWidth": null,
+      "coverHeight": null
+    },
+    {
+      "id": "9675b159-a080-43aa-acd3-976d043f44ad",
+      "title": "The Story of Civilization - 02 - The Life of Greece",
+      "author": "Will Durant",
+      "coverPath": "/audiobooks/Will.Durant.Audiobook.Collection-The.Story.of.Civilization-FiLELiST/The Story of Civilization - 02 - The Life of Greece/cover.jpg",
+      "coverURL": "/api/items/9675b159-a080-43aa-acd3-976d043f44ad/cover",
+      "progress": 0,
+      "coverWidth": 400,
+      "coverHeight": 400
+    },
+    {
+      "id": "e358374d-a6d8-4891-8170-ba1c6e2cd473",
+      "title": "The Hobbit, or There and Back Again",
+      "author": "Andy Serkis",
+      "coverPath": "/metadata/items/e358374d-a6d8-4891-8170-ba1c6e2cd473/cover.jpg",
+      "coverURL": "/api/items/e358374d-a6d8-4891-8170-ba1c6e2cd473/cover",
+      "progress": 0,
+      "coverWidth": 400,
+      "coverHeight": 400
+    },
+    {
+      "id": "de0ec388-ac6c-44c4-b170-b7f7aaf6c485",
+      "title": "F01 - Foundation",
+      "author": "Isaac Asimov",
+      "coverPath": "/audiobooks/Isaac.Asimov.Audiobook.Collection-FiLELiST/F01 - Foundation/cover.jpg",
+      "coverURL": "/api/items/de0ec388-ac6c-44c4-b170-b7f7aaf6c485/cover",
+      "progress": 0,
+      "coverWidth": 400,
+      "coverHeight": 400
+    },
+    {
+      "id": "c23911de-8cf2-4e23-9a48-76cfe284ffe6",
+      "title": "The Caves of Steel(not mine)",
+      "author": "Isaac Asimov",
+      "coverPath": "/audiobooks/Isaac.Asimov.Audiobook.Collection-FiLELiST/The Caves of Steel(not mine)/cover.jpg",
+      "coverURL": "/api/items/c23911de-8cf2-4e23-9a48-76cfe284ffe6/cover",
+      "progress": 0,
+      "coverWidth": 400,
+      "coverHeight": 400
+    },
+    {
+      "id": "67811b4e-9d48-46c2-83d3-a636cc6bab73",
+      "title": "F07 - Foward the Foundation",
+      "author": "Isaac Asimov",
+      "coverPath": null,
+      "coverURL": "/api/items/67811b4e-9d48-46c2-83d3-a636cc6bab73/cover",
+      "progress": 0,
+      "coverWidth": null,
+      "coverHeight": null
+    },
+    {
+      "id": "b37a2400-febc-4642-acce-b90ad3d4a0ba",
+      "title": "F04 - Foundation's Edge",
+      "author": "Isaac Asimov",
+      "coverPath": "/audiobooks/Isaac.Asimov.Audiobook.Collection-FiLELiST/F04 - Foundation's Edge/cover.jpg",
+      "coverURL": "/api/items/b37a2400-febc-4642-acce-b90ad3d4a0ba/cover",
+      "progress": 0,
+      "coverWidth": 400,
+      "coverHeight": 400
+    },
+    {
+      "id": "ed4b633b-c4a6-4097-a842-da7ec1ed9a3d",
+      "title": "The Naked Sun",
+      "author": "Isaac Asimov",
+      "coverPath": "/audiobooks/Isaac.Asimov.Audiobook.Collection-FiLELiST/The Naked Sun/cover.jpg",
+      "coverURL": "/api/items/ed4b633b-c4a6-4097-a842-da7ec1ed9a3d/cover",
+      "progress": 0,
+      "coverWidth": 400,
+      "coverHeight": 400
+    },
+    {
+      "id": "e0225177-644b-459f-9b73-5472b89b4261",
+      "title": "Book 5 - Foundation And Earth",
+      "author": "Isaac Asimov",
+      "coverPath": "/audiobooks/Isaac.Asimov.Audiobook.Collection-FiLELiST/Book 5 - Foundation And Earth/cover.jpg",
+      "coverURL": "/api/items/e0225177-644b-459f-9b73-5472b89b4261/cover",
+      "progress": 0,
+      "coverWidth": 400,
+      "coverHeight": 400
+    }
+  ]
+}

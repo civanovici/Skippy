@@ -30,8 +30,8 @@
 		A1B2C3D4E5F60718293A0013 /* SkippyTests-Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "SkippyTests-Release.xcconfig"; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A0014 /* SkippyUITests-Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "SkippyUITests-Debug.xcconfig"; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A0015 /* SkippyUITests-Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "SkippyUITests-Release.xcconfig"; sourceTree = "<group>"; };
-		A1B2C3D4E5F60718293A0016 /* Signing.shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Signing.shared.xcconfig"; sourceTree = "<group>"; };
-		A1B2C3D4E5F60718293A0017 /* Signing.local.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Signing.local.xcconfig.example"; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0016 /* Signing.shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.shared.xcconfig; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0017 /* Signing.local.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.local.xcconfig.example; sourceTree = "<group>"; };
 		BB21C6FD2F516586008A60A5 /* Skippy.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Skippy.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB21C70D2F516587008A60A5 /* SkippyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SkippyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB21C7172F516587008A60A5 /* SkippyUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SkippyUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -80,17 +80,6 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		BB21C6F42F516586008A60A5 = {
-			isa = PBXGroup;
-			children = (
-				A1B2C3D4E5F60718293A0001 /* Config */,
-				BB21C6FF2F516586008A60A5 /* Skippy */,
-				BB21C7102F516587008A60A5 /* SkippyTests */,
-				BB21C71A2F516587008A60A5 /* SkippyUITests */,
-				BB21C6FE2F516586008A60A5 /* Products */,
-			);
-			sourceTree = "<group>";
-		};
 		A1B2C3D4E5F60718293A0001 /* Config */ = {
 			isa = PBXGroup;
 			children = (
@@ -120,6 +109,17 @@
 				A1B2C3D4E5F60718293A0017 /* Signing.local.xcconfig.example */,
 			);
 			path = Signing;
+			sourceTree = "<group>";
+		};
+		BB21C6F42F516586008A60A5 = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F60718293A0001 /* Config */,
+				BB21C6FF2F516586008A60A5 /* Skippy */,
+				BB21C7102F516587008A60A5 /* SkippyTests */,
+				BB21C71A2F516587008A60A5 /* SkippyUITests */,
+				BB21C6FE2F516586008A60A5 /* Products */,
+			);
 			sourceTree = "<group>";
 		};
 		BB21C6FE2F516586008A60A5 /* Products */ = {

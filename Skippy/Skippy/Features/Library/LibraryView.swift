@@ -25,47 +25,25 @@ struct LibraryView: View {
                 } else if viewModel.books.isEmpty {
                     ContentUnavailableView("No audiobooks", systemImage: "books.vertical")
                 } else {
-                    List(viewModel.books) { book in
-                        NavigationLink {
-                            BookDetailView(
-                                viewModel: makeBookDetailViewModel(book),
-                                makePlayerViewModel: { chapter in
-                                    makePlayerViewModel(book, chapter)
-                                }
-                            )
-                        } label: {
-                            HStack(alignment: .top, spacing: 12) {
-                                AsyncImage(url: book.coverURL) { phase in
-                                    switch phase {
-                                    case let .success(image):
-                                        image
-                                            .resizable()
-                                            .scaledToFill()
-                                    default:
-                                        ZStack {
-                                            Color.secondary.opacity(0.15)
-                                            Image(systemName: "books.vertical")
-                                                .foregroundStyle(.secondary)
+                    ScrollView {
+                        LazyVGrid(columns: gridColumns, spacing: 14) {
+                            ForEach(viewModel.books) { book in
+                                NavigationLink {
+                                    BookDetailView(
+                                        viewModel: makeBookDetailViewModel(book),
+                                        makePlayerViewModel: { chapter in
+                                            makePlayerViewModel(book, chapter)
                                         }
-                                    }
+                                    )
+                                } label: {
+                                    BookCardView(book: book)
                                 }
-                                .frame(width: 54, height: 54)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(book.title)
-                                        .font(.headline)
-                                        .lineLimit(2)
-                                    Text(book.author)
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                    ProgressView(value: book.progress)
-                                }
+                                .buttonStyle(.plain)
                             }
                         }
+                        .padding(.horizontal, 12)
+                        .padding(.top, 10)
                     }
-                    .listStyle(.plain)
                 }
             }
             .navigationTitle("Library")
@@ -83,6 +61,12 @@ struct LibraryView: View {
                 await viewModel.load()
             }
         }
+    }
+
+    private var gridColumns: [GridItem] {
+        [
+            GridItem(.adaptive(minimum: 150, maximum: 190), spacing: 14, alignment: .top),
+        ]
     }
 }
 
