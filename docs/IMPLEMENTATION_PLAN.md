@@ -27,18 +27,18 @@ Goal: Create a buildable iOS app skeleton with the right capabilities and archit
 
 ### Checkpoints
 
-- [ ] Create branch `codex/ios-init`
-- [ ] Create Xcode project (`Skippy`) with:
-  - [ ] iOS app target (SwiftUI)
-  - [ ] Unit test target
-  - [ ] UI test target
-- [ ] Set deployment target to iOS 17+
-- [ ] Configure bundle identifier and signing placeholders
-- [ ] Enable Background Modes capability:
-  - [ ] Audio, AirPlay, Picture in Picture
-- [ ] Add app icon placeholders / assets scaffold
-- [ ] Add project folder structure (see Architecture Skeleton below)
-- [ ] App launches to a placeholder root screen
+- [x] Create branch `codex/ios-init`
+- [x] Create Xcode project (`Skippy`) with:
+  - [x] iOS app target (SwiftUI)
+  - [x] Unit test target
+  - [x] UI test target
+- [x] Set deployment target to iOS 17+
+- [x] Configure bundle identifier and signing placeholders
+- [x] Enable Background Modes capability:
+  - [x] Audio, AirPlay, Picture in Picture
+- [x] Add app icon placeholders / assets scaffold
+- [x] Add project folder structure (see Architecture Skeleton below)
+- [x] App launches to a placeholder root screen
 
 ### Exit Criteria
 
@@ -360,4 +360,3 @@ Use this section to log issues as they appear.
 - Wait for Xcode simulator/runtime install to finish
 - Create branch `codex/ios-init`
 - Generate Xcode project and Phase 0/1 skeleton
-
