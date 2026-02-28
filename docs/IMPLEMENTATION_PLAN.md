@@ -279,25 +279,27 @@ Goal: Start listening from the app with reliable streaming playback.
 
 - [x] Book detail API/data loading
 - [x] Chapter/track list UI
-- [ ] Replace large Play CTA with inline transport controls in detail layout
-- [ ] Make control strip resilient when artwork is omitted (no empty left-image slot assumptions)
-- [ ] Remove non-essential right-side controls; keep speed/timer/bookmark
-- [ ] Implement `PlayerService` using `AVPlayer`/`AVFoundation`
-- [ ] Start stream playback from beginning
+- [x] Replace large Play CTA with inline transport controls in detail layout
+- [x] Make control strip resilient when artwork is omitted (no empty left-image slot assumptions)
+- [x] Remove non-essential right-side controls; keep speed/timer/bookmark
+- [x] Implement `PlayerService` using `AVPlayer`/`AVFoundation`
+- [x] Start stream playback from beginning
 - [x] Resume playback from saved position
-- [ ] Playback speed controls (`1x`, `1.25x`, `1.5x`, `2x`)
-- [ ] Seek back/forward controls are exactly `15s`
-- [ ] Previous/next chapter controls (enabled only when chapter exists)
-- [ ] Scrubber with time-preview while dragging
-- [ ] Display elapsed, remaining, and percentage completion in player UI
-- [ ] Basic buffering/loading state UI
-- [ ] Handle network playback failure + retry
+- [x] Playback speed controls (`1x`, `1.25x`, `1.5x`, `2x`)
+- [x] Seek back/forward controls are exactly `15s`
+- [x] Previous/next chapter controls (enabled only when chapter exists)
+- [x] Scrubber with time-preview while dragging
+- [x] Display elapsed, remaining, and percentage completion in player UI
+- [-] Basic buffering/loading state UI
+- [-] Handle network playback failure + retry
 - [ ] Fix no-audio output path:
-  - [ ] Validate stream URL/source
-  - [ ] Validate `AVAudioSession` category/activation
-  - [ ] Validate device route and mute-state handling
+  - [x] Validate stream URL/source
+  - [x] Validate `AVAudioSession` category/activation
+  - [-] Validate device route and mute-state handling
 - [x] Sleep timer controls
 - [x] Bookmark controls (local + server sync)
+- [x] Chapter completion indicators in chapter list
+- [x] Book-level progress display in metadata row (`total / elapsed / percent`)
 
 ### Exit Criteria
 
@@ -317,17 +319,18 @@ Goal: Playback continues when screen locks/backgrounds and integrates with iOS m
 
 ### Checkpoints
 
-- [ ] Configure `AVAudioSession` for playback
-- [ ] Confirm Background Modes capability works in build
-- [ ] Verify lock-screen continuity on physical iPhone:
-  - [ ] Start playback, lock device, confirm audio continues
+- [x] Configure `AVAudioSession` for playback
+- [x] Confirm Background Modes capability works in build
+- [!] Verify lock-screen continuity on physical iPhone:
+  - [!] Start playback, lock device, confirm audio continues
   - [ ] Unlock device, confirm state remains in sync
-- [ ] Add `NowPlayingService` with metadata updates
-- [ ] Integrate `MPNowPlayingInfoCenter`
-- [ ] Integrate `MPRemoteCommandCenter`
-- [ ] Support play/pause/seek remote commands
-- [ ] Handle audio interruptions (calls/Siri/alarms)
-- [ ] Handle route changes (Bluetooth/headphones disconnect)
+- [x] Add `NowPlayingService` with metadata updates
+- [x] Integrate `MPNowPlayingInfoCenter`
+- [x] Integrate `MPRemoteCommandCenter`
+- [x] Support play/pause/seek remote commands
+- [x] Handle audio interruptions (calls/Siri/alarms)
+- [x] Handle route changes (Bluetooth/headphones disconnect)
+- [-] Investigate lock-screen playback stop after 1-2s and transport reset
 
 ### Exit Criteria
 
@@ -382,18 +385,19 @@ Goal: Preserve progress locally and sync to Audiobookshelf when possible.
 
 - [x] Persist local progress updates while playing
 - [ ] Persist a dedicated app-local playback timeline resilient to server-side resets/bugs
-- [ ] Throttle/debounce progress writes to avoid excessive I/O
+- [x] Throttle/debounce progress writes to avoid excessive I/O
 - [x] Restore progress on app relaunch
 - [x] Implement progress sync API call(s)
 - [ ] Queue failed sync attempts for retry
-- [x] Timestamp-based conflict handling (most recent wins)
-- [ ] Replace silent "most recent wins" for large conflicts with explicit user choice dialog:
-  - [ ] "Continue with App Time"
-  - [ ] "Continue with Server Time"
+- [-] Timestamp-based conflict handling (baseline still used as fallback)
+- [x] Replace silent "most recent wins" for large conflicts with explicit user choice dialog:
+  - [x] "Continue with App Time"
+  - [x] "Continue with Server Time"
   - [ ] Show both positions and last-updated timestamps in dialog
-- [ ] Define meaningful conflict threshold (seconds/percent) before prompting user
-- [ ] Track and surface sync-event failures with actionable UI copy
+- [x] Define meaningful conflict threshold (seconds/percent) before prompting user
+- [-] Track and surface sync-event failures with actionable UI copy
 - [x] Visual confirmation (subtle progress indicators)
+- [x] Degrade to local-only sync when server/API progress endpoint mismatch persists in-session
 
 ### Exit Criteria
 
@@ -483,11 +487,11 @@ Use this section to log issues as they appear.
 
 ### Active Blockers
 
-- [ ] Investigate no-audio playback on device
-- [ ] Investigate sync-event errors and conflict UX for local-vs-server progress
+- [!] Lock-screen/background playback stops after device lock on physical iPhone (lock UI appears, playback halts shortly after)
+- [-] Investigate sync-event errors and conflict UX for local-vs-server progress
 
 ## Current Next Step
 
-- Wait for Xcode simulator/runtime install to finish
-- Create branch `codex/ios-init`
-- Generate Xcode project and Phase 0/1 skeleton
+- Validate lock-screen playback failure on physical device with targeted runtime logs (`AVAudioSession`, `AVPlayerItem`, `NowPlayingInfoCenter`)
+- Confirm server transport profile (`http` vs `https`, certificate trust, local network reachability) and apply ATS/network policy adjustments if needed
+- Complete Phase 5 exit criteria on-device and then close remaining Phase 7 sync UX polish

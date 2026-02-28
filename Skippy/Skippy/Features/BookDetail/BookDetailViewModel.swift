@@ -4,6 +4,12 @@ import Observation
 @MainActor
 @Observable
 final class BookDetailViewModel {
+    enum ChapterProgressState: Equatable {
+        case completed
+        case inProgress
+        case upcoming
+    }
+
     let book: Audiobook
 
     var details: AudiobookDetails?
@@ -12,6 +18,7 @@ final class BookDetailViewModel {
 
     private let apiClient: APIClientProtocol
     private let authStore: AuthStore
+    private let persistenceController: PersistenceController
     private let logger: Logger
     private var loadRequestID = 0
 
@@ -30,10 +37,17 @@ final class BookDetailViewModel {
         return formatter
     }()
 
-    init(book: Audiobook, apiClient: APIClientProtocol, authStore: AuthStore, logger: Logger) {
+    init(
+        book: Audiobook,
+        apiClient: APIClientProtocol,
+        authStore: AuthStore,
+        persistenceController: PersistenceController,
+        logger: Logger
+    ) {
         self.book = book
         self.apiClient = apiClient
         self.authStore = authStore
+        self.persistenceController = persistenceController
         self.logger = logger
     }
 
@@ -100,7 +114,11 @@ final class BookDetailViewModel {
         guard total > 0 else {
             return "Unknown"
         }
-        return Self.durationFormatter.string(from: total) ?? "Unknown"
+        let totalText = Self.durationFormatter.string(from: total) ?? "Unknown"
+        let elapsed = resolvedProgressSeconds(totalDuration: total)
+        let elapsedText = Self.durationFormatter.string(from: elapsed) ?? "0m"
+        let percent = Int((min(max(elapsed / total, 0), 1) * 100).rounded())
+        return "\(totalText) / \(elapsedText) / \(percent)%"
     }
 
     var sizeText: String {
@@ -127,5 +145,49 @@ final class BookDetailViewModel {
 
     var resumeChapter: Chapter? {
         displayChapters.first
+    }
+
+    func chapterProgressState(for chapter: Chapter) -> ChapterProgressState {
+        guard let chapterIndex = displayChapters.firstIndex(where: { $0.id == chapter.id }) else {
+            return .upcoming
+        }
+        let elapsed = resolvedProgressSeconds(totalDuration: details?.duration ?? displayChapters.reduce(0) { $0 + $1.duration })
+        let chapterStart = displayChapters.prefix(chapterIndex).reduce(0) { $0 + max($1.duration, 0) }
+        let chapterEnd = chapterStart + max(chapter.duration, 0)
+
+        if elapsed >= chapterEnd, chapter.duration > 0 {
+            return .completed
+        }
+        if elapsed > chapterStart {
+            return .inProgress
+        }
+        return .upcoming
+    }
+
+    private func resolvedProgressSeconds(totalDuration: TimeInterval) -> TimeInterval {
+        let local = persistenceController.loadProgress(for: book.id)
+        let remote = details?.userProgress
+        let progress = chooseMostRecent(local: local, remote: remote)
+
+        if let progress {
+            if progress.isFinished {
+                return max(totalDuration, progress.durationSeconds)
+            }
+            return max(progress.positionSeconds, 0)
+        }
+        return max(min(book.progress, 1), 0) * max(totalDuration, 0)
+    }
+
+    private func chooseMostRecent(local: PlaybackProgress?, remote: PlaybackProgress?) -> PlaybackProgress? {
+        switch (local, remote) {
+        case let (lhs?, rhs?):
+            return lhs.updatedAt >= rhs.updatedAt ? lhs : rhs
+        case let (lhs?, nil):
+            return lhs
+        case let (nil, rhs?):
+            return rhs
+        case (nil, nil):
+            return nil
+        }
     }
 }

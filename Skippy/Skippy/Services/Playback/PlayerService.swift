@@ -1,5 +1,7 @@
 import AVFoundation
 import Foundation
+import MediaPlayer
+import UIKit
 
 enum PlayerServiceError: Error, Equatable {
     case noPlayableTracks
@@ -53,10 +55,25 @@ final class PlayerService: PlayerServiceProtocol {
     private var timeObserverToken: Any?
     private var endObserverToken: NSObjectProtocol?
     private var itemStatusObservation: NSKeyValueObservation?
+    private var interruptionObserverToken: NSObjectProtocol?
+    private var routeChangeObserverToken: NSObjectProtocol?
+    private var stalledObserverToken: NSObjectProtocol?
+    private var failedToEndObserverToken: NSObjectProtocol?
+    private var didEnterBackgroundObserverToken: NSObjectProtocol?
+    private var willResignActiveObserverToken: NSObjectProtocol?
+    private var timeControlStatusObservation: NSKeyValueObservation?
+    private var reasonForWaitingObservation: NSKeyValueObservation?
+    private var wasPlayingBeforeInterruption = false
 
     init() {
         configureAudioSession()
+        player.automaticallyWaitsToMinimizeStalling = true
+        player.preventsDisplaySleepDuringVideoPlayback = false
         installTimeObserver()
+        installAudioLifecycleObservers()
+        configureRemoteCommands()
+        installAppLifecycleObserver()
+        installDiagnosticObservers()
     }
 
     deinit {
@@ -66,7 +83,27 @@ final class PlayerService: PlayerServiceProtocol {
         if let endObserverToken {
             NotificationCenter.default.removeObserver(endObserverToken)
         }
+        if let interruptionObserverToken {
+            NotificationCenter.default.removeObserver(interruptionObserverToken)
+        }
+        if let routeChangeObserverToken {
+            NotificationCenter.default.removeObserver(routeChangeObserverToken)
+        }
+        if let stalledObserverToken {
+            NotificationCenter.default.removeObserver(stalledObserverToken)
+        }
+        if let failedToEndObserverToken {
+            NotificationCenter.default.removeObserver(failedToEndObserverToken)
+        }
+        if let didEnterBackgroundObserverToken {
+            NotificationCenter.default.removeObserver(didEnterBackgroundObserverToken)
+        }
+        if let willResignActiveObserverToken {
+            NotificationCenter.default.removeObserver(willResignActiveObserverToken)
+        }
         itemStatusObservation = nil
+        timeControlStatusObservation = nil
+        reasonForWaitingObservation = nil
     }
 
     func configure(
@@ -99,8 +136,10 @@ final class PlayerService: PlayerServiceProtocol {
         guard player.currentItem != nil else {
             return
         }
+        ensureAudioSessionIsActive()
         isPlaying = true
-        player.playImmediately(atRate: rate)
+        player.play()
+        player.rate = rate
     }
 
     func pause() {
@@ -144,11 +183,161 @@ final class PlayerService: PlayerServiceProtocol {
         }
     }
 
+    private func ensureAudioSessionIsActive() {
+        do {
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            // Keep attempting playback even if re-activation fails.
+        }
+    }
+
     private func installTimeObserver() {
         let interval = CMTime(seconds: 1, preferredTimescale: 600)
         timeObserverToken = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             guard let self else { return }
             self.updateCurrentTime(using: time)
+        }
+    }
+
+    private func installAudioLifecycleObservers() {
+        interruptionObserverToken = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] notification in
+            guard let self else { return }
+            guard let info = notification.userInfo,
+                  let typeValue = info[AVAudioSessionInterruptionTypeKey] as? UInt,
+                  let type = AVAudioSession.InterruptionType(rawValue: typeValue) else {
+                return
+            }
+
+            switch type {
+            case .began:
+                self.wasPlayingBeforeInterruption = self.isPlaying
+            case .ended:
+                if self.wasPlayingBeforeInterruption {
+                    self.play()
+                }
+                self.wasPlayingBeforeInterruption = false
+            @unknown default:
+                break
+            }
+        }
+
+        routeChangeObserverToken = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.routeChangeNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.ensureAudioSessionIsActive()
+        }
+    }
+
+    private func configureRemoteCommands() {
+        let center = MPRemoteCommandCenter.shared()
+        center.playCommand.removeTarget(nil)
+        center.pauseCommand.removeTarget(nil)
+        center.togglePlayPauseCommand.removeTarget(nil)
+        center.changePlaybackPositionCommand.removeTarget(nil)
+        center.skipForwardCommand.removeTarget(nil)
+        center.skipBackwardCommand.removeTarget(nil)
+
+        center.playCommand.isEnabled = true
+        center.pauseCommand.isEnabled = true
+        center.togglePlayPauseCommand.isEnabled = true
+        center.changePlaybackPositionCommand.isEnabled = false
+        center.skipForwardCommand.isEnabled = true
+        center.skipBackwardCommand.isEnabled = true
+        center.skipForwardCommand.preferredIntervals = [15]
+        center.skipBackwardCommand.preferredIntervals = [15]
+
+        let capturedPlayer = player
+        center.playCommand.addTarget { [weak self] _ in
+            guard let self else { return .commandFailed }
+            try? AVAudioSession.sharedInstance().setActive(true)
+            capturedPlayer.play()
+            capturedPlayer.rate = self.rate
+            Task { @MainActor in self.isPlaying = true }
+            return .success
+        }
+        center.pauseCommand.addTarget { [weak self] _ in
+            guard self != nil else { return .commandFailed }
+            capturedPlayer.pause()
+            Task { @MainActor in self?.isPlaying = false }
+            return .success
+        }
+        center.togglePlayPauseCommand.addTarget { [weak self] _ in
+            guard let self else { return .commandFailed }
+            if capturedPlayer.rate == 0 {
+                try? AVAudioSession.sharedInstance().setActive(true)
+                capturedPlayer.play()
+                capturedPlayer.rate = self.rate
+                Task { @MainActor in self.isPlaying = true }
+            } else {
+                capturedPlayer.pause()
+                Task { @MainActor in self.isPlaying = false }
+            }
+            return .success
+        }
+        center.skipForwardCommand.addTarget { [weak self] _ in
+            guard let self else { return .commandFailed }
+            Task { @MainActor in self.seek(by: 15) }
+            return .success
+        }
+        center.skipBackwardCommand.addTarget { [weak self] _ in
+            guard let self else { return .commandFailed }
+            Task { @MainActor in self.seek(by: -15) }
+            return .success
+        }
+    }
+
+    private func installAppLifecycleObserver() {
+        didEnterBackgroundObserverToken = NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            if self.isPlaying {
+                self.ensureAudioSessionIsActive()
+                self.player.play()
+                self.player.rate = self.rate
+            }
+        }
+    }
+
+    private func installDiagnosticObservers() {
+        timeControlStatusObservation = player.observe(\.timeControlStatus, options: [.new, .old]) { [weak self] player, change in
+            let oldVal = change.oldValue.map { "\($0.rawValue)" } ?? "nil"
+            let newVal = change.newValue.map { "\($0.rawValue)" } ?? "nil"
+            let statusName: String
+            switch player.timeControlStatus {
+            case .paused: statusName = "PAUSED"
+            case .waitingToPlayAtSpecifiedRate: statusName = "WAITING"
+            case .playing: statusName = "PLAYING"
+            @unknown default: statusName = "UNKNOWN"
+            }
+            let reason = player.reasonForWaitingToPlay?.rawValue ?? "none"
+            let audioActive = AVAudioSession.sharedInstance().isOtherAudioPlaying
+            let category = AVAudioSession.sharedInstance().category.rawValue
+            let itemStatus = player.currentItem?.status.rawValue ?? -1
+            print("[PlayerService] timeControlStatus: \(oldVal)->\(newVal) (\(statusName)), reason: \(reason), audioSession: \(category), otherAudio: \(audioActive), itemStatus: \(itemStatus), rate: \(player.rate)")
+            _ = self
+        }
+
+        willResignActiveObserverToken = NotificationCenter.default.addObserver(
+            forName: UIApplication.willResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            let status = self.player.timeControlStatus.rawValue
+            let rate = self.player.rate
+            let hasItem = self.player.currentItem != nil
+            let itemStatus = self.player.currentItem?.status.rawValue ?? -1
+            print("[PlayerService] willResignActive — isPlaying: \(self.isPlaying), timeControl: \(status), rate: \(rate), hasItem: \(hasItem), itemStatus: \(itemStatus)")
         }
     }
 
@@ -175,6 +364,7 @@ final class PlayerService: PlayerServiceProtocol {
 
         currentTrackIndex = index
         let item = AVPlayerItem(url: tracks[index].url)
+        disableVideoTracks(for: item)
         itemStatusObservation = item.observe(\.status, options: [.initial, .new]) { [weak self] observedItem, _ in
             Task { @MainActor in
                 guard let self else { return }
@@ -186,11 +376,13 @@ final class PlayerService: PlayerServiceProtocol {
         }
         player.replaceCurrentItem(with: item)
         installEndObserver()
+        installItemObservers(item: item)
 
         seekCurrentTrack(to: seekTime) { [weak self] in
             guard let self else { return }
             if autoplay {
-                self.player.playImmediately(atRate: self.rate)
+                self.player.play()
+                self.player.rate = self.rate
                 self.isPlaying = true
             } else {
                 self.player.pause()
@@ -225,6 +417,46 @@ final class PlayerService: PlayerServiceProtocol {
             return
         }
         loadTrack(index: nextIndex, seekTime: 0, autoplay: isPlaying)
+    }
+
+    private func installItemObservers(item: AVPlayerItem) {
+        if let stalledObserverToken {
+            NotificationCenter.default.removeObserver(stalledObserverToken)
+        }
+        if let failedToEndObserverToken {
+            NotificationCenter.default.removeObserver(failedToEndObserverToken)
+        }
+
+        stalledObserverToken = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemPlaybackStalled,
+            object: item,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.ensureAudioSessionIsActive()
+            if self.isPlaying {
+                self.player.play()
+                self.player.rate = self.rate
+            }
+        }
+
+        failedToEndObserverToken = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemFailedToPlayToEndTime,
+            object: item,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.pause()
+            self.onError?(.failedToLoadTrack)
+        }
+    }
+
+    private func disableVideoTracks(for item: AVPlayerItem) {
+        for track in item.tracks {
+            if track.assetTrack?.mediaType == .video {
+                track.isEnabled = false
+            }
+        }
     }
 
     private func resolvedTracks(audiobook: Audiobook, tracks: [AudiobookTrack]) -> [TrackSource] {

@@ -130,8 +130,21 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
             method: "PATCH",
             body: body
         )
-        let response: MediaProgressResponse = try await decode(request, expecting: MediaProgressResponse.self)
-        return mapPlaybackProgress(itemID: itemID, payload: response, durationHint: duration)
+        let responseData = try await requestData(request)
+        if let response = parseMediaProgressResponse(responseData) {
+            return mapPlaybackProgress(itemID: itemID, payload: response, durationHint: duration)
+        }
+
+        // Some server versions respond with empty body or non-progress envelope for successful updates.
+        return PlaybackProgress(
+            audiobookID: itemID,
+            chapterID: nil,
+            positionSeconds: currentTime,
+            durationSeconds: duration,
+            isFinished: isFinished,
+            updatedAt: Date(),
+            lastServerSyncAt: Date()
+        )
     }
 
     func createBookmark(
@@ -695,6 +708,24 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
         }
     }
 
+    private func parseMediaProgressResponse(_ data: Data) -> MediaProgressPayload? {
+        guard !data.isEmpty else {
+            return nil
+        }
+
+        if let direct = try? JSONDecoder().decode(MediaProgressPayload.self, from: data) {
+            return direct
+        }
+
+        if let wrapped = try? JSONDecoder().decode(MediaProgressEnvelope.self, from: data) {
+            return wrapped.mediaProgress
+                ?? wrapped.progress
+                ?? wrapped.result
+        }
+
+        return nil
+    }
+
     private func requestData(_ request: URLRequest) async throws -> Data {
         let data: Data
         let response: URLResponse
@@ -1001,6 +1032,12 @@ private struct MediaProgressPayload: Decodable {
     let isFinished: Bool?
     let finishedAt: Int64?
     let lastUpdate: Int64?
+}
+
+private struct MediaProgressEnvelope: Decodable {
+    let mediaProgress: MediaProgressPayload?
+    let progress: MediaProgressPayload?
+    let result: MediaProgressPayload?
 }
 
 private struct LibraryItemMedia: Decodable {

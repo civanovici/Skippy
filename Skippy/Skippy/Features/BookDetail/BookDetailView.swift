@@ -53,9 +53,6 @@ struct BookDetailView: View {
         .task {
             await viewModel.load()
         }
-        .onDisappear {
-            inlinePlayerViewModel?.stop()
-        }
         .alert("Unable to Load Details", isPresented: errorAlertIsPresented) {
             Button("Retry") {
                 Task {
@@ -252,6 +249,9 @@ struct BookDetailView: View {
                         }
                     } label: {
                         HStack {
+                            Image(systemName: chapterStatusIcon(for: chapter))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(chapterStatusColor(for: chapter))
                             Text(chapter.title)
                                 .foregroundStyle(.primary)
                                 .lineLimit(1)
@@ -346,6 +346,28 @@ struct BookDetailView: View {
         String(format: "%.2gx", rate)
     }
 
+    private func chapterStatusIcon(for chapter: Chapter) -> String {
+        switch viewModel.chapterProgressState(for: chapter) {
+        case .completed:
+            return "checkmark.circle.fill"
+        case .inProgress:
+            return "play.circle.fill"
+        case .upcoming:
+            return "circle"
+        }
+    }
+
+    private func chapterStatusColor(for chapter: Chapter) -> Color {
+        switch viewModel.chapterProgressState(for: chapter) {
+        case .completed:
+            return .green
+        case .inProgress:
+            return .accentColor
+        case .upcoming:
+            return .secondary
+        }
+    }
+
     private func timeText(_ seconds: TimeInterval) -> String {
         let total = max(Int(seconds.rounded(.down)), 0)
         let hours = total / 3600
@@ -366,6 +388,7 @@ struct BookDetailView: View {
                 book: book,
                 apiClient: APIClient(audiobookshelf: MockAudiobookshelfAPI()),
                 authStore: AuthStore.previewAuthenticated,
+                persistenceController: PersistenceController(),
                 logger: Logger()
             ),
             makePlayerViewModel: { chapter in

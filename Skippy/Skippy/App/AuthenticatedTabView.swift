@@ -19,6 +19,7 @@ struct AuthenticatedTabView: View {
                         book: book,
                         apiClient: dependencies.apiClient,
                         authStore: dependencies.authStore,
+                        persistenceController: dependencies.persistenceController,
                         logger: dependencies.logger
                     )
                 },
@@ -51,6 +52,7 @@ struct AuthenticatedTabView: View {
                         book: book,
                         apiClient: dependencies.apiClient,
                         authStore: dependencies.authStore,
+                        persistenceController: dependencies.persistenceController,
                         logger: dependencies.logger
                     )
                 },
@@ -83,6 +85,7 @@ struct AuthenticatedTabView: View {
                         book: book,
                         apiClient: dependencies.apiClient,
                         authStore: dependencies.authStore,
+                        persistenceController: dependencies.persistenceController,
                         logger: dependencies.logger
                     )
                 },
@@ -115,6 +118,7 @@ struct AuthenticatedTabView: View {
                         book: book,
                         apiClient: dependencies.apiClient,
                         authStore: dependencies.authStore,
+                        persistenceController: dependencies.persistenceController,
                         logger: dependencies.logger
                     )
                 },

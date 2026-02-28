@@ -63,6 +63,7 @@ final class PlayerViewModel {
     private var syncTask: Task<Void, Never>?
     private var syncRequestID = 0
     private var lastTickSyncTime: TimeInterval = 0
+    private var remoteSyncDisabled = false
 
     var title: String { audiobook.title }
     var subtitle: String {
@@ -146,6 +147,7 @@ final class PlayerViewModel {
         }
         hasStarted = true
         nowPlayingService.update(audiobook: audiobook, chapter: currentChapter)
+        nowPlayingService.updatePlayback(currentTime: currentTime, duration: duration, rate: selectedRate, isPlaying: false)
         playerService.onTick = { [weak self] newTime in
             guard let self else { return }
             Task { @MainActor in
@@ -238,12 +240,14 @@ final class PlayerViewModel {
         }
         playerService.play()
         isPlaying = playerService.isPlaying
+        nowPlayingService.updatePlayback(currentTime: currentTime, duration: duration, rate: selectedRate, isPlaying: isPlaying)
         scheduleSync(immediate: true)
     }
 
     func pause() {
         playerService.pause()
         isPlaying = playerService.isPlaying
+        nowPlayingService.updatePlayback(currentTime: currentTime, duration: duration, rate: selectedRate, isPlaying: isPlaying)
         scheduleSync(immediate: true)
     }
 
@@ -272,6 +276,7 @@ final class PlayerViewModel {
     func setRate(_ rate: Float) {
         selectedRate = rate
         playerService.setRate(rate)
+        nowPlayingService.updatePlayback(currentTime: currentTime, duration: duration, rate: selectedRate, isPlaying: isPlaying)
     }
 
     func previousChapter() {
@@ -380,6 +385,7 @@ final class PlayerViewModel {
         if duration > 0, currentTime >= duration {
             isPlaying = false
         }
+        nowPlayingService.updatePlayback(currentTime: currentTime, duration: duration, rate: selectedRate, isPlaying: isPlaying)
         persistLocalProgress()
         if (currentTime - lastTickSyncTime) >= 15 {
             lastTickSyncTime = currentTime
@@ -427,6 +433,10 @@ final class PlayerViewModel {
     }
 
     private func syncProgress(forceFinished: Bool = false) async {
+        guard !remoteSyncDisabled else {
+            syncStatusText = "Local only"
+            return
+        }
         guard let session = authStore.session else {
             syncStatusText = "Local only"
             return
@@ -451,6 +461,12 @@ final class PlayerViewModel {
             syncStatusText = "Synced"
             errorMessage = nil
         } catch {
+            if let apiError = error as? APIError, apiError.isAPIMismatchLike {
+                remoteSyncDisabled = true
+                syncStatusText = "Local only"
+                logger.info("Progress sync disabled for this session due to server/API mismatch.")
+                return
+            }
             guard requestID == syncRequestID else {
                 return
             }
@@ -502,6 +518,7 @@ final class PlayerViewModel {
             playerService.pause()
             isPlaying = false
         }
+        nowPlayingService.updatePlayback(currentTime: currentTime, duration: duration, rate: selectedRate, isPlaying: isPlaying)
         scheduleSync(immediate: true)
     }
 
@@ -526,6 +543,8 @@ final class PlayerViewModel {
         currentTime = min(chosen.positionSeconds, max(duration, chosen.positionSeconds))
         isPlaying = false
         progressConflict = nil
+        nowPlayingService.update(audiobook: audiobook, chapter: currentChapter)
+        nowPlayingService.updatePlayback(currentTime: currentTime, duration: duration, rate: selectedRate, isPlaying: false)
         persistLocalProgress()
     }
 

@@ -103,6 +103,7 @@ struct CollectionsView: View {
                 book: $0,
                 apiClient: APIClient(audiobookshelf: MockAudiobookshelfAPI()),
                 authStore: AuthStore.previewAuthenticated,
+                persistenceController: PersistenceController(),
                 logger: Logger()
             )
         },

@@ -172,9 +172,6 @@ struct PlayerView: View {
         .task {
             await viewModel.start()
         }
-        .onDisappear {
-            viewModel.stop()
-        }
         .alert("Player Notice", isPresented: errorAlertPresented) {
             Button("OK", role: .cancel) {}
         } message: {
