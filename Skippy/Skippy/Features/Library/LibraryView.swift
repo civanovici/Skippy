@@ -105,7 +105,16 @@ struct LibraryView: View {
             )
         },
         makePlayerViewModel: { book, chapter in
-            PlayerViewModel(audiobook: book, chapter: chapter, playerService: PlayerService(), nowPlayingService: NowPlayingService())
+            PlayerViewModel(
+                audiobook: book,
+                chapter: chapter,
+                playerService: PlayerService(),
+                nowPlayingService: NowPlayingService(),
+                apiClient: APIClient(audiobookshelf: MockAudiobookshelfAPI()),
+                authStore: AuthStore.previewAuthenticated,
+                persistenceController: PersistenceController(),
+                logger: Logger()
+            )
         }
     )
 }

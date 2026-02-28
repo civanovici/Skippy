@@ -8,6 +8,21 @@ protocol AudiobookshelfAPI {
     func fetchSeries(session: UserSession) async throws -> [HomeShelf]
     func fetchCollections(session: UserSession) async throws -> [HomeShelf]
     func search(session: UserSession, query: String) async throws -> SearchResult
+    func fetchMediaProgress(session: UserSession, itemID: String) async throws -> PlaybackProgress?
+    func updateMediaProgress(
+        session: UserSession,
+        itemID: String,
+        currentTime: TimeInterval,
+        duration: TimeInterval,
+        isFinished: Bool
+    ) async throws -> PlaybackProgress
+    func createBookmark(
+        session: UserSession,
+        itemID: String,
+        time: TimeInterval,
+        title: String
+    ) async throws -> AudioBookmark
+    func removeBookmark(session: UserSession, itemID: String, time: TimeInterval) async throws
 }
 
 struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
@@ -67,7 +82,90 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
         )
 
         let payload: ItemDetailsResponse = try await decode(request, expecting: ItemDetailsResponse.self)
-        return mapBookDetails(payload, itemID: itemID)
+        return mapBookDetails(payload, itemID: itemID, userSession: userSession)
+    }
+
+    func fetchMediaProgress(session userSession: UserSession, itemID: String) async throws -> PlaybackProgress? {
+        let request = makeAuthedRequest(
+            userSession.serverURL
+                .appending(path: "/api/me/progress")
+                .appending(path: itemID),
+            token: userSession.token
+        )
+
+        do {
+            let response: MediaProgressResponse = try await decode(request, expecting: MediaProgressResponse.self)
+            return mapPlaybackProgress(
+                itemID: itemID,
+                payload: response,
+                durationHint: response.duration ?? 0
+            )
+        } catch APIError.serverAPIMismatch {
+            return nil
+        } catch APIError.decodingFailed {
+            return nil
+        }
+    }
+
+    func updateMediaProgress(
+        session userSession: UserSession,
+        itemID: String,
+        currentTime: TimeInterval,
+        duration: TimeInterval,
+        isFinished: Bool
+    ) async throws -> PlaybackProgress {
+        let url = userSession.serverURL
+            .appending(path: "/api/me/progress")
+            .appending(path: itemID)
+        let body = ProgressUpdateRequest(
+            duration: duration,
+            progress: duration > 0 ? min(max(currentTime / duration, 0), 1) : nil,
+            currentTime: currentTime,
+            isFinished: isFinished,
+            finishedAt: isFinished ? Date().millisecondsSinceEpoch : nil
+        )
+        let request = try makeAuthedJSONRequest(
+            url,
+            token: userSession.token,
+            method: "PATCH",
+            body: body
+        )
+        let response: MediaProgressResponse = try await decode(request, expecting: MediaProgressResponse.self)
+        return mapPlaybackProgress(itemID: itemID, payload: response, durationHint: duration)
+    }
+
+    func createBookmark(
+        session userSession: UserSession,
+        itemID: String,
+        time: TimeInterval,
+        title: String
+    ) async throws -> AudioBookmark {
+        let url = userSession.serverURL
+            .appending(path: "/api/me/item")
+            .appending(path: itemID)
+            .appending(path: "bookmark")
+        let request = try makeAuthedJSONRequest(
+            url,
+            token: userSession.token,
+            method: "POST",
+            body: BookmarkRequest(time: time, title: title)
+        )
+        let response: BookmarkResponse = try await decode(request, expecting: BookmarkResponse.self)
+        return mapBookmark(itemID: itemID, bookmark: response)
+    }
+
+    func removeBookmark(session userSession: UserSession, itemID: String, time: TimeInterval) async throws {
+        let encodedTime = String(Int(time.rounded(.towardZero)))
+        let request = makeAuthedRequest(
+            userSession.serverURL
+                .appending(path: "/api/me/item")
+                .appending(path: itemID)
+                .appending(path: "bookmark")
+                .appending(path: encodedTime),
+            token: userSession.token,
+            method: "DELETE"
+        )
+        _ = try await requestData(request)
     }
 
     func fetchPersonalizedShelves(session userSession: UserSession) async throws -> [HomeShelf] {
@@ -216,7 +314,7 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
         )
     }
 
-    private func mapBookDetails(_ item: ItemDetailsResponse, itemID: String) -> AudiobookDetails {
+    private func mapBookDetails(_ item: ItemDetailsResponse, itemID: String, userSession: UserSession) -> AudiobookDetails {
         let media = item.media
         let metadata = media?.metadata
         let chapters = (media?.chapters ?? []).enumerated().map { index, chapter in
@@ -232,9 +330,21 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
                 title: track.title?.nonEmpty
                     ?? track.metadata?.filename?.nonEmpty
                     ?? "Track \(index + 1)",
-                duration: track.duration
+                startOffset: max(track.startOffset ?? 0, 0),
+                duration: track.duration,
+                streamURL: makeTrackURL(
+                    baseURL: userSession.serverURL,
+                    contentURL: track.contentURL,
+                    token: userSession.token
+                )
             )
         }
+
+        let progressPayload = item.userMediaProgress ?? item.mediaProgress
+        let mappedProgress = progressPayload.flatMap {
+            mapPlaybackProgress(itemID: itemID, payload: $0, durationHint: media?.duration ?? 0)
+        }
+        let mappedBookmarks = (item.bookmarks ?? []).map { mapBookmark(itemID: itemID, bookmark: $0) }
 
         return AudiobookDetails(
             subtitle: metadata?.subtitle?.nonEmpty,
@@ -246,7 +356,41 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
             duration: media?.duration,
             sizeBytes: media?.size,
             chapters: chapters,
-            tracks: tracks
+            tracks: tracks,
+            userProgress: mappedProgress,
+            bookmarks: mappedBookmarks
+        )
+    }
+
+    private func mapPlaybackProgress(
+        itemID: String,
+        payload: MediaProgressPayload,
+        durationHint: TimeInterval
+    ) -> PlaybackProgress {
+        let duration = max(payload.duration ?? durationHint, 0)
+        let currentTime = max(payload.currentTime ?? 0, 0)
+        let updatedAt = payload.lastUpdate.flatMap { Date(millisecondsSinceEpoch: $0) } ?? Date()
+        let finished = payload.isFinished
+            ?? ((payload.progress ?? 0) >= 1
+                || (duration > 0 && currentTime >= duration))
+
+        return PlaybackProgress(
+            audiobookID: itemID,
+            chapterID: nil,
+            positionSeconds: duration > 0 ? min(currentTime, duration) : currentTime,
+            durationSeconds: duration,
+            isFinished: finished,
+            updatedAt: updatedAt,
+            lastServerSyncAt: Date()
+        )
+    }
+
+    private func mapBookmark(itemID: String, bookmark: BookmarkPayload) -> AudioBookmark {
+        AudioBookmark(
+            audiobookID: itemID,
+            title: bookmark.title?.nonEmpty ?? "Bookmark",
+            time: max(bookmark.time ?? 0, 0),
+            createdAt: bookmark.createdAt.flatMap { Date(millisecondsSinceEpoch: $0) }
         )
     }
 
@@ -484,7 +628,36 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
         return components?.url
     }
 
-    private func makeAuthedRequest(_ url: URL, token: String, queryItems: [URLQueryItem] = []) -> URLRequest {
+    private func makeTrackURL(baseURL: URL, contentURL: String?, token: String) -> URL? {
+        guard let contentURL, !contentURL.isEmpty else {
+            return nil
+        }
+
+        let rawURL: URL?
+        if contentURL.hasPrefix("http://") || contentURL.hasPrefix("https://") {
+            rawURL = URL(string: contentURL)
+        } else {
+            rawURL = URL(string: contentURL, relativeTo: baseURL)?.absoluteURL
+        }
+        guard let rawURL else {
+            return nil
+        }
+
+        var components = URLComponents(url: rawURL, resolvingAgainstBaseURL: false)
+        var queryItems = components?.queryItems ?? []
+        if !queryItems.contains(where: { $0.name == "token" }) {
+            queryItems.append(URLQueryItem(name: "token", value: token))
+        }
+        components?.queryItems = queryItems
+        return components?.url ?? rawURL
+    }
+
+    private func makeAuthedRequest(
+        _ url: URL,
+        token: String,
+        method: String = "GET",
+        queryItems: [URLQueryItem] = []
+    ) -> URLRequest {
         var finalURL = url
         let allQueryItems = queryItems + [URLQueryItem(name: "token", value: token)]
         if !allQueryItems.isEmpty {
@@ -493,12 +666,36 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
             finalURL = components?.url ?? url
         }
         var request = URLRequest(url: finalURL)
-        request.httpMethod = "GET"
+        request.httpMethod = method
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         return request
     }
 
+    private func makeAuthedJSONRequest<T: Encodable>(
+        _ url: URL,
+        token: String,
+        method: String,
+        body: T
+    ) throws -> URLRequest {
+        var request = makeAuthedRequest(url, token: token, method: method)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(body)
+        return request
+    }
+
     private func decode<T: Decodable>(_ request: URLRequest, expecting _: T.Type) async throws -> T {
+        let data = try await requestData(request)
+
+        do {
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch let decodingError as DecodingError {
+            throw APIError.decodingFailed(String(describing: decodingError))
+        } catch {
+            throw APIError.serverAPIMismatch
+        }
+    }
+
+    private func requestData(_ request: URLRequest) async throws -> Data {
         let data: Data
         let response: URLResponse
 
@@ -519,20 +716,12 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
 
         switch http.statusCode {
         case 200 ..< 300:
-            break
+            return data
         case 401, 403:
             throw APIError.invalidCredentials
         case 404, 405:
             throw APIError.serverAPIMismatch
         default:
-            throw APIError.serverAPIMismatch
-        }
-
-        do {
-            return try JSONDecoder().decode(T.self, from: data)
-        } catch let decodingError as DecodingError {
-            throw APIError.decodingFailed(String(describing: decodingError))
-        } catch {
             throw APIError.serverAPIMismatch
         }
     }
@@ -587,8 +776,24 @@ struct MockAudiobookshelfAPI: AudiobookshelfAPI {
             sizeBytes: 1_110_000_000,
             chapters: Audiobook.mockLibrary.first?.chapters ?? [],
             tracks: [
-                AudiobookTrack(id: "track-1", title: "Columbus Day.m4b", duration: 3600),
-            ]
+                AudiobookTrack(
+                    id: "track-1",
+                    title: "Columbus Day.m4b",
+                    startOffset: 0,
+                    duration: 3600,
+                    streamURL: URL(string: "https://example.com/audio/mock.m4b")
+                ),
+            ],
+            userProgress: PlaybackProgress(
+                audiobookID: itemID,
+                chapterID: nil,
+                positionSeconds: 120,
+                durationSeconds: 3600,
+                isFinished: false,
+                updatedAt: Date(),
+                lastServerSyncAt: Date()
+            ),
+            bookmarks: []
         )
     }
 
@@ -631,6 +836,66 @@ struct MockAudiobookshelfAPI: AudiobookshelfAPI {
             books: filtered,
             series: [HomeShelf(id: "series-1", title: "Expeditionary Force", books: filtered)]
         )
+    }
+
+    func fetchMediaProgress(session: UserSession, itemID: String) async throws -> PlaybackProgress? {
+        guard !session.token.isEmpty else {
+            throw APIError.unauthorized
+        }
+        return PlaybackProgress(
+            audiobookID: itemID,
+            chapterID: nil,
+            positionSeconds: 0,
+            durationSeconds: 0,
+            isFinished: false,
+            updatedAt: Date(),
+            lastServerSyncAt: Date()
+        )
+    }
+
+    func updateMediaProgress(
+        session: UserSession,
+        itemID: String,
+        currentTime: TimeInterval,
+        duration: TimeInterval,
+        isFinished: Bool
+    ) async throws -> PlaybackProgress {
+        guard !session.token.isEmpty else {
+            throw APIError.unauthorized
+        }
+        return PlaybackProgress(
+            audiobookID: itemID,
+            chapterID: nil,
+            positionSeconds: currentTime,
+            durationSeconds: duration,
+            isFinished: isFinished,
+            updatedAt: Date(),
+            lastServerSyncAt: Date()
+        )
+    }
+
+    func createBookmark(
+        session: UserSession,
+        itemID: String,
+        time: TimeInterval,
+        title: String
+    ) async throws -> AudioBookmark {
+        guard !session.token.isEmpty else {
+            throw APIError.unauthorized
+        }
+        return AudioBookmark(
+            audiobookID: itemID,
+            title: title,
+            time: time,
+            createdAt: Date()
+        )
+    }
+
+    func removeBookmark(session: UserSession, itemID: String, time: TimeInterval) async throws {
+        guard !session.token.isEmpty else {
+            throw APIError.unauthorized
+        }
+        _ = (itemID, time)
     }
 }
 
@@ -722,13 +987,20 @@ private struct LibraryItem: Decodable {
     let id: String
     let mediaType: String?
     let progress: Double?
-    let mediaProgress: ProgressPayload?
-    let userMediaProgress: ProgressPayload?
+    let mediaProgress: MediaProgressPayload?
+    let userMediaProgress: MediaProgressPayload?
     let media: LibraryItemMedia?
 }
 
-private struct ProgressPayload: Decodable {
+private typealias MediaProgressResponse = MediaProgressPayload
+
+private struct MediaProgressPayload: Decodable {
+    let duration: TimeInterval?
     let progress: Double?
+    let currentTime: TimeInterval?
+    let isFinished: Bool?
+    let finishedAt: Int64?
+    let lastUpdate: Int64?
 }
 
 private struct LibraryItemMedia: Decodable {
@@ -781,6 +1053,9 @@ private struct LibraryItemChapter: Decodable {
 
 private struct ItemDetailsResponse: Decodable {
     let media: ItemDetailsMedia?
+    let mediaProgress: MediaProgressPayload?
+    let userMediaProgress: MediaProgressPayload?
+    let bookmarks: [BookmarkPayload]?
 }
 
 private struct ItemDetailsMedia: Decodable {
@@ -832,12 +1107,44 @@ private struct ItemDetailsMetadata: Decodable {
 private struct ItemDetailsTrack: Decodable {
     let ino: String?
     let title: String?
+    let startOffset: TimeInterval?
     let duration: TimeInterval?
+    let contentURL: String?
     let metadata: ItemDetailsTrackMetadata?
+
+    private enum CodingKeys: String, CodingKey {
+        case ino
+        case title
+        case startOffset
+        case duration
+        case contentURL = "contentUrl"
+        case metadata
+    }
 }
 
 private struct ItemDetailsTrackMetadata: Decodable {
     let filename: String?
+}
+
+private typealias BookmarkResponse = BookmarkPayload
+
+private struct BookmarkPayload: Decodable {
+    let title: String?
+    let time: TimeInterval?
+    let createdAt: Int64?
+}
+
+private struct ProgressUpdateRequest: Encodable {
+    let duration: TimeInterval
+    let progress: Double?
+    let currentTime: TimeInterval
+    let isFinished: Bool
+    let finishedAt: Int64?
+}
+
+private struct BookmarkRequest: Encodable {
+    let time: TimeInterval
+    let title: String
 }
 
 private struct PersonalizedShelf: Decodable {
@@ -930,6 +1237,16 @@ private extension String {
     var nonEmpty: String? {
         let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+private extension Date {
+    init(millisecondsSinceEpoch: Int64) {
+        self = Date(timeIntervalSince1970: TimeInterval(millisecondsSinceEpoch) / 1000)
+    }
+
+    var millisecondsSinceEpoch: Int64 {
+        Int64((timeIntervalSince1970 * 1000).rounded())
     }
 }
 

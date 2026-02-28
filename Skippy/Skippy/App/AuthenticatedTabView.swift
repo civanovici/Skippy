@@ -27,7 +27,11 @@ struct AuthenticatedTabView: View {
                         audiobook: book,
                         chapter: chapter,
                         playerService: dependencies.playerService,
-                        nowPlayingService: dependencies.nowPlayingService
+                        nowPlayingService: dependencies.nowPlayingService,
+                        apiClient: dependencies.apiClient,
+                        authStore: dependencies.authStore,
+                        persistenceController: dependencies.persistenceController,
+                        logger: dependencies.logger
                     )
                 }
             )
@@ -55,7 +59,11 @@ struct AuthenticatedTabView: View {
                         audiobook: book,
                         chapter: chapter,
                         playerService: dependencies.playerService,
-                        nowPlayingService: dependencies.nowPlayingService
+                        nowPlayingService: dependencies.nowPlayingService,
+                        apiClient: dependencies.apiClient,
+                        authStore: dependencies.authStore,
+                        persistenceController: dependencies.persistenceController,
+                        logger: dependencies.logger
                     )
                 }
             )
@@ -83,7 +91,11 @@ struct AuthenticatedTabView: View {
                         audiobook: book,
                         chapter: chapter,
                         playerService: dependencies.playerService,
-                        nowPlayingService: dependencies.nowPlayingService
+                        nowPlayingService: dependencies.nowPlayingService,
+                        apiClient: dependencies.apiClient,
+                        authStore: dependencies.authStore,
+                        persistenceController: dependencies.persistenceController,
+                        logger: dependencies.logger
                     )
                 }
             )
@@ -111,7 +123,11 @@ struct AuthenticatedTabView: View {
                         audiobook: book,
                         chapter: chapter,
                         playerService: dependencies.playerService,
-                        nowPlayingService: dependencies.nowPlayingService
+                        nowPlayingService: dependencies.nowPlayingService,
+                        apiClient: dependencies.apiClient,
+                        authStore: dependencies.authStore,
+                        persistenceController: dependencies.persistenceController,
+                        logger: dependencies.logger
                     )
                 }
             )

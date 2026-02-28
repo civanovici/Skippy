@@ -255,26 +255,54 @@ Goal: Start listening from the app with reliable streaming playback.
 ### User-Facing Scope
 
 - Book details and chapter list
-- Play/resume
-- Seek/scrub
-- Playback speed
+- Inline player controls directly in the detail surface (no forced navigation to a separate player screen when pressing Play)
+- Player layout should not depend on showing the left cover image (cover can be optional/hidden without breaking control layout)
+- Standard transport controls:
+  - Play/Pause (single toggle button)
+  - Seek back `15s`
+  - Seek forward `15s`
+  - Previous/Next chapter when available
+- Scrubbing behavior like a standard audiobook player:
+  - User can drag backward/forward freely
+  - During scrubbing, show target time preview (iOS interaction; hover-equivalent)
+- Always-visible progress metrics:
+  - Percent complete
+  - Elapsed time
+  - Remaining time
+- Keep right-side utility controls focused to:
+  - Playback speed
+  - Sleep timer
+  - Bookmark actions
+- Audible playback on device (no silent playback bug)
 
 ### Checkpoints
 
-- [ ] Book detail API/data loading
-- [ ] Chapter/track list UI
+- [x] Book detail API/data loading
+- [x] Chapter/track list UI
+- [ ] Replace large Play CTA with inline transport controls in detail layout
+- [ ] Make control strip resilient when artwork is omitted (no empty left-image slot assumptions)
+- [ ] Remove non-essential right-side controls; keep speed/timer/bookmark
 - [ ] Implement `PlayerService` using `AVPlayer`/`AVFoundation`
 - [ ] Start stream playback from beginning
-- [ ] Resume playback from saved position
-- [ ] Seek forward/back controls
+- [x] Resume playback from saved position
 - [ ] Playback speed controls (`1x`, `1.25x`, `1.5x`, `2x`)
-- [ ] Scrubber and time display
+- [ ] Seek back/forward controls are exactly `15s`
+- [ ] Previous/next chapter controls (enabled only when chapter exists)
+- [ ] Scrubber with time-preview while dragging
+- [ ] Display elapsed, remaining, and percentage completion in player UI
 - [ ] Basic buffering/loading state UI
 - [ ] Handle network playback failure + retry
+- [ ] Fix no-audio output path:
+  - [ ] Validate stream URL/source
+  - [ ] Validate `AVAudioSession` category/activation
+  - [ ] Validate device route and mute-state handling
+- [x] Sleep timer controls
+- [x] Bookmark controls (local + server sync)
 
 ### Exit Criteria
 
-- User can stream a book end-to-end in foreground with stable controls
+- User can stream a book end-to-end in foreground with audible output and standard controls
+- User does not need to navigate to a separate page just to access core playback controls
 
 ## Phase 5: Background Playback + Lock Screen Controls
 
@@ -285,11 +313,15 @@ Goal: Playback continues when screen locks/backgrounds and integrates with iOS m
 - Continue playback with phone locked
 - Control playback from lock screen / Control Center / headphones
 - Show now playing metadata/artwork
+- Playback must continue when iPhone screen is closed/locked (background audio is required, not optional)
 
 ### Checkpoints
 
 - [ ] Configure `AVAudioSession` for playback
 - [ ] Confirm Background Modes capability works in build
+- [ ] Verify lock-screen continuity on physical iPhone:
+  - [ ] Start playback, lock device, confirm audio continues
+  - [ ] Unlock device, confirm state remains in sync
 - [ ] Add `NowPlayingService` with metadata updates
 - [ ] Integrate `MPNowPlayingInfoCenter`
 - [ ] Integrate `MPRemoteCommandCenter`
@@ -301,6 +333,7 @@ Goal: Playback continues when screen locks/backgrounds and integrates with iOS m
 
 - Locking the phone does not stop audiobook playback
 - System media controls control the app reliably
+- Verified on real device (not simulator-only)
 
 ## Phase 6: Offline Downloads (Core MVP)
 
@@ -343,20 +376,29 @@ Goal: Preserve progress locally and sync to Audiobookshelf when possible.
 - Resume where user left off
 - Progress survives app restarts
 - Syncs to server when online
+- If app-local progress and server progress differ materially, user is asked which source to continue with
 
 ### Checkpoints
 
-- [ ] Persist local progress updates while playing
+- [x] Persist local progress updates while playing
+- [ ] Persist a dedicated app-local playback timeline resilient to server-side resets/bugs
 - [ ] Throttle/debounce progress writes to avoid excessive I/O
-- [ ] Restore progress on app relaunch
-- [ ] Implement progress sync API call(s)
+- [x] Restore progress on app relaunch
+- [x] Implement progress sync API call(s)
 - [ ] Queue failed sync attempts for retry
-- [ ] Timestamp-based conflict handling (most recent wins)
-- [ ] Visual confirmation (subtle progress indicators)
+- [x] Timestamp-based conflict handling (most recent wins)
+- [ ] Replace silent "most recent wins" for large conflicts with explicit user choice dialog:
+  - [ ] "Continue with App Time"
+  - [ ] "Continue with Server Time"
+  - [ ] Show both positions and last-updated timestamps in dialog
+- [ ] Define meaningful conflict threshold (seconds/percent) before prompting user
+- [ ] Track and surface sync-event failures with actionable UI copy
+- [x] Visual confirmation (subtle progress indicators)
 
 ### Exit Criteria
 
 - Progress resumes correctly after app restart and syncs after reconnecting
+- User can reliably recover from server-reset progress using app-local timeline
 
 ## Phase 8: Settings + Onboarding Preferences (MVP Polish)
 
@@ -436,10 +478,13 @@ Use this section to log issues as they appear.
 - Xcode simulator/runtime install may delay initial project generation/testing
 - Audiobookshelf API details may require adjustments after first integration
 - Background downloads may be constrained by auth/token behavior
+- Current public Audiobookshelf API docs are explicitly marked as out-of-date; endpoint behavior must be validated against running server responses
+- Playback currently can fail silently if audio session/route/stream setup is incomplete
 
 ### Active Blockers
 
-- [ ] None currently
+- [ ] Investigate no-audio playback on device
+- [ ] Investigate sync-event errors and conflict UX for local-vs-server progress
 
 ## Current Next Step
 

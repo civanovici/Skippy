@@ -522,6 +522,8 @@ struct SkippyTests {
         #expect(details.chapters[0].id == "1")
         #expect(details.tracks.count == 1)
         #expect(details.tracks[0].title == "part1.m4b")
+        #expect(details.userProgress == nil)
+        #expect(details.bookmarks.isEmpty)
     }
 
     @Test
@@ -704,6 +706,112 @@ struct SkippyTests {
             #expect(BookCardImageLayout.fitsInsideContainer(image: size, container: container))
         }
     }
+
+    @Test
+    func persistenceControllerPersistsProgressAndBookmarks() throws {
+        let defaultsName = "skippy.tests.persistence.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: defaultsName)!
+        defaults.removePersistentDomain(forName: defaultsName)
+
+        let controller = PersistenceController(userDefaults: defaults)
+        let progress = PlaybackProgress(
+            audiobookID: "book-1",
+            chapterID: "ch-1",
+            positionSeconds: 321,
+            durationSeconds: 900,
+            isFinished: false,
+            updatedAt: Date(timeIntervalSince1970: 100),
+            lastServerSyncAt: Date(timeIntervalSince1970: 95)
+        )
+        let bookmarks = [
+            AudioBookmark(audiobookID: "book-1", title: "A", time: 12, createdAt: Date(timeIntervalSince1970: 50)),
+            AudioBookmark(audiobookID: "book-1", title: "B", time: 99, createdAt: Date(timeIntervalSince1970: 60)),
+        ]
+
+        controller.save(progress)
+        controller.saveBookmarks(bookmarks, for: "book-1")
+
+        let reloaded = PersistenceController(userDefaults: defaults)
+        #expect(reloaded.loadProgress(for: "book-1") == progress)
+        #expect(reloaded.loadBookmarks(for: "book-1") == bookmarks)
+    }
+
+    @Test
+    func playerViewModelPrefersNewerServerProgress() async throws {
+        let authStore = AuthStore(keychainStore: InMemoryKeychainStore(), logger: Logger())
+        authStore.signIn(session: UserSession(
+            serverURL: URL(string: "http://example.test:1234")!,
+            username: "u",
+            token: "tkn"
+        ))
+
+        let defaultsName = "skippy.tests.player.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: defaultsName)!
+        defaults.removePersistentDomain(forName: defaultsName)
+        let persistence = PersistenceController(userDefaults: defaults)
+        persistence.save(
+            PlaybackProgress(
+                audiobookID: "book-1",
+                chapterID: nil,
+                positionSeconds: 120,
+                durationSeconds: 500,
+                isFinished: false,
+                updatedAt: Date(timeIntervalSince1970: 100),
+                lastServerSyncAt: nil
+            )
+        )
+
+        let api = StubAudiobookshelfAPI(
+            fetchBookDetailsImpl: { _, _ in
+                AudiobookDetails(
+                    subtitle: nil,
+                    narrators: [],
+                    publishedYear: nil,
+                    publisher: nil,
+                    genres: [],
+                    description: nil,
+                    duration: 500,
+                    sizeBytes: nil,
+                    chapters: [],
+                    tracks: [],
+                    userProgress: nil,
+                    bookmarks: []
+                )
+            },
+            fetchMediaProgressImpl: { _, _ in
+                PlaybackProgress(
+                    audiobookID: "book-1",
+                    chapterID: nil,
+                    positionSeconds: 300,
+                    durationSeconds: 500,
+                    isFinished: false,
+                    updatedAt: Date(timeIntervalSince1970: 200),
+                    lastServerSyncAt: Date(timeIntervalSince1970: 200)
+                )
+            }
+        )
+
+        let viewModel = PlayerViewModel(
+            audiobook: Audiobook(
+                id: "book-1",
+                title: "Book One",
+                author: "Author",
+                progress: 0,
+                coverURL: nil,
+                chapters: [Chapter(id: "c1", title: "Chapter 1", duration: 500)]
+            ),
+            chapter: nil,
+            playerService: PlayerService(),
+            nowPlayingService: NowPlayingService(),
+            apiClient: StubAPIClient(audiobookshelf: api),
+            authStore: authStore,
+            persistenceController: persistence,
+            logger: Logger()
+        )
+
+        await viewModel.start()
+        #expect(viewModel.currentTime == 300)
+    }
 }
 
 private func makeSession(
@@ -769,6 +877,10 @@ private struct StubAudiobookshelfAPI: AudiobookshelfAPI {
     var fetchSeriesImpl: ((UserSession) async throws -> [HomeShelf])?
     var fetchCollectionsImpl: ((UserSession) async throws -> [HomeShelf])?
     var searchImpl: ((UserSession, String) async throws -> SearchResult)?
+    var fetchMediaProgressImpl: ((UserSession, String) async throws -> PlaybackProgress?)?
+    var updateMediaProgressImpl: ((UserSession, String, TimeInterval, TimeInterval, Bool) async throws -> PlaybackProgress)?
+    var createBookmarkImpl: ((UserSession, String, TimeInterval, String) async throws -> AudioBookmark)?
+    var removeBookmarkImpl: ((UserSession, String, TimeInterval) async throws -> Void)?
 
     func login(serverURL: String, username: String, password: String) async throws -> UserSession {
         if let loginImpl {
@@ -802,7 +914,9 @@ private struct StubAudiobookshelfAPI: AudiobookshelfAPI {
             duration: nil,
             sizeBytes: nil,
             chapters: [],
-            tracks: []
+            tracks: [],
+            userProgress: nil,
+            bookmarks: []
         )
     }
 
@@ -832,6 +946,52 @@ private struct StubAudiobookshelfAPI: AudiobookshelfAPI {
             return try await searchImpl(session, query)
         }
         return SearchResult(books: [], series: [])
+    }
+
+    func fetchMediaProgress(session: UserSession, itemID: String) async throws -> PlaybackProgress? {
+        if let fetchMediaProgressImpl {
+            return try await fetchMediaProgressImpl(session, itemID)
+        }
+        return nil
+    }
+
+    func updateMediaProgress(
+        session: UserSession,
+        itemID: String,
+        currentTime: TimeInterval,
+        duration: TimeInterval,
+        isFinished: Bool
+    ) async throws -> PlaybackProgress {
+        if let updateMediaProgressImpl {
+            return try await updateMediaProgressImpl(session, itemID, currentTime, duration, isFinished)
+        }
+        return PlaybackProgress(
+            audiobookID: itemID,
+            chapterID: nil,
+            positionSeconds: currentTime,
+            durationSeconds: duration,
+            isFinished: isFinished,
+            updatedAt: Date(),
+            lastServerSyncAt: Date()
+        )
+    }
+
+    func createBookmark(
+        session: UserSession,
+        itemID: String,
+        time: TimeInterval,
+        title: String
+    ) async throws -> AudioBookmark {
+        if let createBookmarkImpl {
+            return try await createBookmarkImpl(session, itemID, time, title)
+        }
+        return AudioBookmark(audiobookID: itemID, title: title, time: time, createdAt: Date())
+    }
+
+    func removeBookmark(session: UserSession, itemID: String, time: TimeInterval) async throws {
+        if let removeBookmarkImpl {
+            return try await removeBookmarkImpl(session, itemID, time)
+        }
     }
 }
 

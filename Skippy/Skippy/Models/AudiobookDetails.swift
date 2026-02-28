@@ -11,10 +11,14 @@ struct AudiobookDetails: Hashable {
     let sizeBytes: Int64?
     let chapters: [Chapter]
     let tracks: [AudiobookTrack]
+    let userProgress: PlaybackProgress?
+    let bookmarks: [AudioBookmark]
 }
 
 struct AudiobookTrack: Identifiable, Hashable {
     let id: String
     let title: String
+    let startOffset: TimeInterval
     let duration: TimeInterval?
+    let streamURL: URL?
 }

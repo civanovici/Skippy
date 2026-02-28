@@ -5,6 +5,9 @@ struct BookDetailView: View {
     let makePlayerViewModel: (Chapter?) -> PlayerViewModel
     @State private var chaptersExpanded = true
     @State private var tracksExpanded = false
+    @State private var inlinePlayerViewModel: PlayerViewModel?
+    @State private var scrubTime: TimeInterval?
+    @State private var isScrubbing = false
 
     private static let shortDurationFormatter: DateComponentsFormatter = {
         let formatter = DateComponentsFormatter()
@@ -50,6 +53,9 @@ struct BookDetailView: View {
         .task {
             await viewModel.load()
         }
+        .onDisappear {
+            inlinePlayerViewModel?.stop()
+        }
         .alert("Unable to Load Details", isPresented: errorAlertIsPresented) {
             Button("Retry") {
                 Task {
@@ -59,6 +65,20 @@ struct BookDetailView: View {
             Button("Dismiss", role: .cancel) {}
         } message: {
             Text(viewModel.errorMessage ?? "Unknown error")
+        }
+        .alert("Playback Position Mismatch", isPresented: inlineConflictIsPresented) {
+            Button("Use App Time") {
+                inlinePlayerViewModel?.resolveProgressConflict(useServer: false)
+            }
+            Button("Use Server Time") {
+                inlinePlayerViewModel?.resolveProgressConflict(useServer: true)
+            }
+        } message: {
+            if let conflict = inlinePlayerViewModel?.progressConflict {
+                Text("App: \(timeText(conflict.local.positionSeconds))  Server: \(timeText(conflict.remote.positionSeconds))")
+            } else {
+                Text("Choose which position to keep.")
+            }
         }
     }
 
@@ -94,18 +114,116 @@ struct BookDetailView: View {
     }
 
     private var controlsRow: some View {
-        HStack(spacing: 12) {
-            NavigationLink {
-                PlayerView(viewModel: makePlayerViewModel(viewModel.resumeChapter))
-            } label: {
-                Label("Play", systemImage: "play.fill")
-                    .frame(maxWidth: 120)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.green)
+        VStack(alignment: .leading, spacing: 14) {
+            if let player = inlinePlayerViewModel {
+                VStack(spacing: 8) {
+                    Slider(
+                        value: Binding(
+                            get: { scrubTime ?? player.currentTime },
+                            set: { scrubTime = $0 }
+                        ),
+                        in: 0...max(player.duration, 1),
+                        onEditingChanged: { editing in
+                            isScrubbing = editing
+                            if !editing {
+                                if let scrubTime {
+                                    player.seek(to: scrubTime)
+                                }
+                                scrubTime = nil
+                            }
+                        }
+                    )
 
-            ProgressView(value: viewModel.book.progress)
-                .frame(maxWidth: .infinity)
+                    HStack {
+                        Text(isScrubbing ? timeText(scrubTime ?? player.currentTime) : player.currentTimeText)
+                            .font(.caption.monospacedDigit())
+                        Spacer()
+                        Text(player.progressPercentText)
+                            .font(.caption.weight(.semibold).monospacedDigit())
+                        Spacer()
+                        Text("-\(player.remainingTimeText)")
+                            .font(.caption.monospacedDigit())
+                    }
+                    .foregroundStyle(.secondary)
+                }
+
+                HStack(spacing: 20) {
+                    if player.hasPreviousChapter {
+                        Button {
+                            player.previousChapter()
+                        } label: {
+                            Image(systemName: "backward.end.fill")
+                        }
+                    }
+
+                    Button {
+                        player.seekBack()
+                    } label: {
+                        Image(systemName: "gobackward.15")
+                            .font(.title2)
+                    }
+
+                    Button {
+                        player.togglePlayPause()
+                    } label: {
+                        Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                            .font(.title2.weight(.semibold))
+                            .frame(width: 52, height: 52)
+                            .background(Circle().fill(.tint))
+                            .foregroundStyle(.white)
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        player.seekForward()
+                    } label: {
+                        Image(systemName: "goforward.15")
+                            .font(.title2)
+                    }
+
+                    if player.hasNextChapter {
+                        Button {
+                            player.nextChapter()
+                        } label: {
+                            Image(systemName: "forward.end.fill")
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .font(.title3)
+
+                HStack(spacing: 10) {
+                    Menu(rateLabel(for: player.selectedRate)) {
+                        ForEach(player.availableRates, id: \.self) { rate in
+                            Button(rateLabel(for: rate)) {
+                                player.setRate(rate)
+                            }
+                        }
+                    }
+                    .buttonStyle(.bordered)
+
+                    Menu("Sleep: \(player.selectedSleepTimer.title)") {
+                        ForEach(PlayerViewModel.SleepTimerOption.allCases, id: \.self) { option in
+                            Button(option.title) {
+                                player.setSleepTimer(option)
+                            }
+                        }
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button("Bookmark") {
+                        Task { await player.addBookmark() }
+                    }
+                    .buttonStyle(.bordered)
+                }
+            } else {
+                Button {
+                    startInlinePlayer(with: viewModel.resumeChapter, autoplay: true)
+                } label: {
+                    Label("Start Playback", systemImage: "play.fill")
+                }
+                .buttonStyle(.borderedProminent)
+            }
         }
     }
 
@@ -125,8 +243,13 @@ struct BookDetailView: View {
         DisclosureGroup(isExpanded: $chaptersExpanded) {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(viewModel.displayChapters) { chapter in
-                    NavigationLink {
-                        PlayerView(viewModel: makePlayerViewModel(chapter))
+                    Button {
+                        if inlinePlayerViewModel == nil {
+                            startInlinePlayer(with: chapter, autoplay: true)
+                        } else {
+                            inlinePlayerViewModel?.selectChapter(chapter)
+                            inlinePlayerViewModel?.play()
+                        }
                     } label: {
                         HStack {
                             Text(chapter.title)
@@ -139,6 +262,7 @@ struct BookDetailView: View {
                         }
                         .padding(.vertical, 4)
                     }
+                    .buttonStyle(.plain)
                 }
             }
             .padding(.top, 8)
@@ -198,6 +322,40 @@ struct BookDetailView: View {
             }
         )
     }
+
+    private var inlineConflictIsPresented: Binding<Bool> {
+        Binding(
+            get: { inlinePlayerViewModel?.progressConflict != nil },
+            set: { _ in }
+        )
+    }
+
+    private func startInlinePlayer(with chapter: Chapter?, autoplay: Bool) {
+        inlinePlayerViewModel?.stop()
+        let playerViewModel = makePlayerViewModel(chapter)
+        inlinePlayerViewModel = playerViewModel
+        Task {
+            await playerViewModel.start()
+            if autoplay {
+                playerViewModel.play()
+            }
+        }
+    }
+
+    private func rateLabel(for rate: Float) -> String {
+        String(format: "%.2gx", rate)
+    }
+
+    private func timeText(_ seconds: TimeInterval) -> String {
+        let total = max(Int(seconds.rounded(.down)), 0)
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        let secs = total % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, secs)
+        }
+        return String(format: "%02d:%02d", minutes, secs)
+    }
 }
 
 #Preview {
@@ -211,7 +369,16 @@ struct BookDetailView: View {
                 logger: Logger()
             ),
             makePlayerViewModel: { chapter in
-                PlayerViewModel(audiobook: book, chapter: chapter, playerService: PlayerService(), nowPlayingService: NowPlayingService())
+                PlayerViewModel(
+                    audiobook: book,
+                    chapter: chapter,
+                    playerService: PlayerService(),
+                    nowPlayingService: NowPlayingService(),
+                    apiClient: APIClient(audiobookshelf: MockAudiobookshelfAPI()),
+                    authStore: AuthStore.previewAuthenticated,
+                    persistenceController: PersistenceController(),
+                    logger: Logger()
+                )
             }
         )
     }

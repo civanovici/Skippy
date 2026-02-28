@@ -29,6 +29,7 @@ final class AppDependencies {
         self.logger = logger
     }
 
+    @MainActor
     static func makeLive() -> AppDependencies {
         let logger = Logger()
         return AppDependencies(
@@ -42,6 +43,7 @@ final class AppDependencies {
         )
     }
 
+    @MainActor
     static func makeMock() -> AppDependencies {
         let logger = Logger()
         return AppDependencies(
