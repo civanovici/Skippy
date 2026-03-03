@@ -567,6 +567,223 @@ struct SkippyTests {
     }
 
     @Test
+    func fetchMyListeningStatsMapsMixedPayloadShapes() async throws {
+        let session = makeSession { request in
+            let path = request.url?.path ?? ""
+            if path == "/api/me/listening-stats" {
+                let payload = """
+                {
+                  "totalTime":7200,
+                  "today":"600",
+                  "dayOfWeek":{"1":1200,"2":"600"},
+                  "days":{"2026-02-28":1800,"2026-02-27":"1200"},
+                  "items":{
+                    "book-1":{"id":"book-1","timeListening":2400,"mediaMetadata":{"title":"One","authorName":"Author One"}},
+                    "book-2":{"timeListening":"1200","title":"Two","author":"Author Two"}
+                  },
+                  "recentSessions":[
+                    {
+                      "id":"sess-1",
+                      "libraryItemId":"book-1",
+                      "timeListening":900,
+                      "startedAt":1700000000000,
+                      "updatedAt":1700000300000,
+                      "mediaMetadata":{"title":"One","authorName":"Author One"}
+                    }
+                  ]
+                }
+                """
+                return ok(request.url!, payload)
+            }
+            return ok(request.url!, #"{}"#)
+        }
+
+        let api = AudiobookshelfHTTPAPI(session: session)
+        let stats = try await api.fetchMyListeningStats(
+            session: UserSession(
+                serverURL: URL(string: "http://example.test:1234")!,
+                username: "u",
+                token: "tkn"
+            ),
+            days: 30
+        )
+
+        #expect(stats.totalTimeSeconds == 7200)
+        #expect(stats.todayTimeSeconds == 600)
+        #expect(stats.dayOfWeekHeatmap[1] == 1200)
+        #expect(stats.dayOfWeekHeatmap[2] == 600)
+        #expect(stats.dailyTotals.count == 2)
+        #expect(stats.topItems.count == 2)
+        #expect(stats.topItems.first?.itemID == "book-1")
+        #expect(stats.topItems.first?.percentOfTotal == (Double(2400) / Double(7200)))
+        #expect(stats.recentSessions.count == 1)
+        #expect(stats.recentSessions[0].itemID == "book-1")
+    }
+
+    @Test
+    func fetchPrimaryLibraryStatsUsesAudiobookLibrary() async throws {
+        let session = makeSession { request in
+            let path = request.url?.path ?? ""
+            if path == "/api/libraries" {
+                let payload = """
+                {
+                  "libraries":[
+                    {"id":"lib-p","name":"Podcasts","mediaType":"podcast"},
+                    {"id":"lib-b","name":"Books","mediaType":"book"}
+                  ]
+                }
+                """
+                return ok(request.url!, payload)
+            }
+            if path == "/api/libraries/lib-b/stats" {
+                let payload = """
+                {
+                  "totalItems":12,
+                  "totalDuration":3600,
+                  "totalSize":2048,
+                  "totalAuthors":4,
+                  "totalGenres":2,
+                  "numAudioTracks":25,
+                  "longestItems":[{"id":"book-1","title":"Longest","duration":1000}],
+                  "largestItems":[{"id":"book-2","title":"Largest","size":4096}],
+                  "authorsWithCount":[{"id":"author-1","name":"Author One","count":3}],
+                  "genresWithCount":[{"genre":"Sci-Fi","count":5}]
+                }
+                """
+                return ok(request.url!, payload)
+            }
+            return ok(request.url!, #"{}"#)
+        }
+
+        let api = AudiobookshelfHTTPAPI(session: session)
+        let stats = try await api.fetchPrimaryLibraryStats(
+            session: UserSession(
+                serverURL: URL(string: "http://example.test:1234")!,
+                username: "u",
+                token: "tkn"
+            )
+        )
+
+        #expect(stats != nil)
+        #expect(stats?.libraryID == "lib-b")
+        #expect(stats?.libraryName == "Books")
+        #expect(stats?.totalItems == 12)
+        #expect(stats?.longestItems.first?.title == "Longest")
+        #expect(stats?.largestItems.first?.title == "Largest")
+    }
+
+    @Test
+    func statsViewModelSignedOutShowsError() async throws {
+        let authStore = AuthStore(keychainStore: InMemoryKeychainStore(), logger: Logger())
+        let viewModel = StatsViewModel(
+            apiClient: StubAPIClient(audiobookshelf: StubAudiobookshelfAPI()),
+            authStore: authStore,
+            logger: Logger()
+        )
+
+        await viewModel.load()
+
+        #expect(viewModel.userStats == nil)
+        #expect(viewModel.libraryStats == nil)
+        #expect(viewModel.errorMessage == "You are not signed in.")
+        #expect(viewModel.isLoading == false)
+    }
+
+    @Test
+    func statsViewModelLoadsUserAndLibraryStats() async throws {
+        let authStore = AuthStore(keychainStore: InMemoryKeychainStore(), logger: Logger())
+        authStore.signIn(session: UserSession(
+            serverURL: URL(string: "http://example.test:1234")!,
+            username: "u",
+            token: "tkn"
+        ))
+
+        let expectedUser = UserListeningStats(
+            totalTimeSeconds: 1200,
+            todayTimeSeconds: 300,
+            dayOfWeekHeatmap: [:],
+            dailyTotals: [],
+            topItems: [],
+            recentSessions: []
+        )
+        let expectedLibrary = LibraryStatsSnapshot(
+            libraryID: "lib-a",
+            libraryName: "Audiobooks",
+            totalItems: 5,
+            totalDurationSeconds: 6000,
+            totalSizeBytes: 1024,
+            totalAuthors: 2,
+            totalGenres: 2,
+            numAudioTracks: 12,
+            largestItems: [],
+            longestItems: [],
+            authorsWithCount: [],
+            genresWithCount: []
+        )
+
+        let api = StubAudiobookshelfAPI(
+            fetchMyListeningStatsImpl: { _, _ in expectedUser },
+            fetchPrimaryLibraryStatsImpl: { _ in expectedLibrary }
+        )
+
+        let viewModel = StatsViewModel(
+            apiClient: StubAPIClient(audiobookshelf: api),
+            authStore: authStore,
+            logger: Logger()
+        )
+
+        await viewModel.load()
+
+        #expect(viewModel.userStats == expectedUser)
+        #expect(viewModel.libraryStats == expectedLibrary)
+        #expect(viewModel.errorMessage == nil)
+    }
+
+    @Test
+    func statsViewModelPartialFailureKeepsAvailableData() async throws {
+        let authStore = AuthStore(keychainStore: InMemoryKeychainStore(), logger: Logger())
+        authStore.signIn(session: UserSession(
+            serverURL: URL(string: "http://example.test:1234")!,
+            username: "u",
+            token: "tkn"
+        ))
+
+        let expectedLibrary = LibraryStatsSnapshot(
+            libraryID: "lib-a",
+            libraryName: "Audiobooks",
+            totalItems: 5,
+            totalDurationSeconds: 6000,
+            totalSizeBytes: 1024,
+            totalAuthors: 2,
+            totalGenres: 2,
+            numAudioTracks: 12,
+            largestItems: [],
+            longestItems: [],
+            authorsWithCount: [],
+            genresWithCount: []
+        )
+
+        let api = StubAudiobookshelfAPI(
+            fetchMyListeningStatsImpl: { _, _ in
+                throw APIError.networkUnreachable
+            },
+            fetchPrimaryLibraryStatsImpl: { _ in expectedLibrary }
+        )
+
+        let viewModel = StatsViewModel(
+            apiClient: StubAPIClient(audiobookshelf: api),
+            authStore: authStore,
+            logger: Logger()
+        )
+
+        await viewModel.load()
+
+        #expect(viewModel.userStats == nil)
+        #expect(viewModel.libraryStats == expectedLibrary)
+        #expect(viewModel.errorMessage == "Listening activity could not be loaded.")
+    }
+
+    @Test
     func libraryViewModelSignedOutShowsError() async throws {
         let authStore = AuthStore(keychainStore: InMemoryKeychainStore(), logger: Logger())
         let viewModel = LibraryViewModel(
@@ -737,7 +954,7 @@ struct SkippyTests {
     }
 
     @Test
-    func playerViewModelPrefersNewerServerProgress() async throws {
+    func playerViewModelCreatesConflictAndAllowsServerSelection() async throws {
         let authStore = AuthStore(keychainStore: InMemoryKeychainStore(), logger: Logger())
         authStore.signIn(session: UserSession(
             serverURL: URL(string: "http://example.test:1234")!,
@@ -810,6 +1027,11 @@ struct SkippyTests {
         )
 
         await viewModel.start()
+        #expect(viewModel.currentTime == 120)
+        #expect(viewModel.progressConflict != nil)
+
+        viewModel.resolveProgressConflict(useServer: true)
+        #expect(viewModel.progressConflict == nil)
         #expect(viewModel.currentTime == 300)
     }
 }
@@ -877,6 +1099,9 @@ private struct StubAudiobookshelfAPI: AudiobookshelfAPI {
     var fetchSeriesImpl: ((UserSession) async throws -> [HomeShelf])?
     var fetchCollectionsImpl: ((UserSession) async throws -> [HomeShelf])?
     var searchImpl: ((UserSession, String) async throws -> SearchResult)?
+    var fetchMyListeningStatsImpl: ((UserSession, Int?) async throws -> UserListeningStats)?
+    var fetchPrimaryLibraryStatsImpl: ((UserSession) async throws -> LibraryStatsSnapshot?)?
+    var fetchLibraryStatsImpl: ((UserSession, String) async throws -> LibraryStatsSnapshot)?
     var fetchMediaProgressImpl: ((UserSession, String) async throws -> PlaybackProgress?)?
     var updateMediaProgressImpl: ((UserSession, String, TimeInterval, TimeInterval, Bool) async throws -> PlaybackProgress)?
     var createBookmarkImpl: ((UserSession, String, TimeInterval, String) async throws -> AudioBookmark)?
@@ -946,6 +1171,47 @@ private struct StubAudiobookshelfAPI: AudiobookshelfAPI {
             return try await searchImpl(session, query)
         }
         return SearchResult(books: [], series: [])
+    }
+
+    func fetchMyListeningStats(session: UserSession, days: Int?) async throws -> UserListeningStats {
+        if let fetchMyListeningStatsImpl {
+            return try await fetchMyListeningStatsImpl(session, days)
+        }
+        return UserListeningStats(
+            totalTimeSeconds: 0,
+            todayTimeSeconds: 0,
+            dayOfWeekHeatmap: [:],
+            dailyTotals: [],
+            topItems: [],
+            recentSessions: []
+        )
+    }
+
+    func fetchPrimaryLibraryStats(session: UserSession) async throws -> LibraryStatsSnapshot? {
+        if let fetchPrimaryLibraryStatsImpl {
+            return try await fetchPrimaryLibraryStatsImpl(session)
+        }
+        return nil
+    }
+
+    func fetchLibraryStats(session: UserSession, libraryID: String) async throws -> LibraryStatsSnapshot {
+        if let fetchLibraryStatsImpl {
+            return try await fetchLibraryStatsImpl(session, libraryID)
+        }
+        return LibraryStatsSnapshot(
+            libraryID: libraryID,
+            libraryName: "Library",
+            totalItems: 0,
+            totalDurationSeconds: 0,
+            totalSizeBytes: 0,
+            totalAuthors: 0,
+            totalGenres: 0,
+            numAudioTracks: 0,
+            largestItems: [],
+            longestItems: [],
+            authorsWithCount: [],
+            genresWithCount: []
+        )
     }
 
     func fetchMediaProgress(session: UserSession, itemID: String) async throws -> PlaybackProgress? {
@@ -1027,8 +1293,28 @@ private struct First20Fixture: Decodable {
 }
 
 private func loadFirst20Fixture() throws -> First20Fixture {
+    let decoder = JSONDecoder()
+    let bundle = Bundle(for: MockURLProtocol.self)
+
+    let bundledURL =
+        bundle.url(forResource: "audiobookshelf_first20", withExtension: "json", subdirectory: "Fixtures")
+        ?? bundle.url(forResource: "audiobookshelf_first20", withExtension: "json")
+
+    if let bundledURL {
+        let data = try Data(contentsOf: bundledURL)
+        return try decoder.decode(First20Fixture.self, from: data)
+    }
+
     let testsDir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-    let fixtureURL = testsDir.appendingPathComponent("Fixtures/audiobookshelf_first20.json")
-    let data = try Data(contentsOf: fixtureURL)
-    return try JSONDecoder().decode(First20Fixture.self, from: data)
+    let sourceURL = testsDir.appendingPathComponent("Fixtures/audiobookshelf_first20.json")
+    if FileManager.default.fileExists(atPath: sourceURL.path) {
+        let data = try Data(contentsOf: sourceURL)
+        return try decoder.decode(First20Fixture.self, from: data)
+    }
+
+    throw NSError(
+        domain: NSCocoaErrorDomain,
+        code: CocoaError.fileNoSuchFile.rawValue,
+        userInfo: [NSFilePathErrorKey: sourceURL.path]
+    )
 }

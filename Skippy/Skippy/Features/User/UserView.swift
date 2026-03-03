@@ -2,6 +2,7 @@ import SwiftUI
 
 struct UserView: View {
     let username: String
+    let makeStatsViewModel: () -> StatsViewModel
     let onLogout: () -> Void
 
     var body: some View {
@@ -9,6 +10,12 @@ struct UserView: View {
             List {
                 Section("Account") {
                     LabeledContent("Username", value: username)
+                }
+
+                Section("Activity") {
+                    NavigationLink("Stats") {
+                        StatsView(viewModel: makeStatsViewModel())
+                    }
                 }
 
                 Section {
@@ -23,5 +30,15 @@ struct UserView: View {
 }
 
 #Preview {
-    UserView(username: "skippy", onLogout: {})
+    UserView(
+        username: "skippy",
+        makeStatsViewModel: {
+            StatsViewModel(
+                apiClient: APIClient(audiobookshelf: MockAudiobookshelfAPI()),
+                authStore: AuthStore.previewAuthenticated,
+                logger: Logger()
+            )
+        },
+        onLogout: {}
+    )
 }

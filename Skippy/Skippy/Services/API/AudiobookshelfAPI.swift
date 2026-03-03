@@ -8,6 +8,9 @@ protocol AudiobookshelfAPI {
     func fetchSeries(session: UserSession) async throws -> [HomeShelf]
     func fetchCollections(session: UserSession) async throws -> [HomeShelf]
     func search(session: UserSession, query: String) async throws -> SearchResult
+    func fetchMyListeningStats(session: UserSession, days: Int?) async throws -> UserListeningStats
+    func fetchPrimaryLibraryStats(session: UserSession) async throws -> LibraryStatsSnapshot?
+    func fetchLibraryStats(session: UserSession, libraryID: String) async throws -> LibraryStatsSnapshot
     func fetchMediaProgress(session: UserSession, itemID: String) async throws -> PlaybackProgress?
     func updateMediaProgress(
         session: UserSession,
@@ -294,6 +297,41 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
         return SearchResult(books: books, series: series)
     }
 
+    func fetchMyListeningStats(session userSession: UserSession, days: Int?) async throws -> UserListeningStats {
+        var queryItems: [URLQueryItem] = []
+        if let days, days > 0 {
+            queryItems.append(URLQueryItem(name: "days", value: String(days)))
+        }
+        let request = makeAuthedRequest(
+            userSession.serverURL.appending(path: "/api/me/listening-stats"),
+            token: userSession.token,
+            queryItems: queryItems
+        )
+
+        let payload: ListeningStatsResponse = try await decode(request, expecting: ListeningStatsResponse.self)
+        return mapListeningStats(payload)
+    }
+
+    func fetchPrimaryLibraryStats(session userSession: UserSession) async throws -> LibraryStatsSnapshot? {
+        let libraries = try await targetAudiobookLibraries(session: userSession)
+        guard let primaryLibrary = libraries.first else {
+            return nil
+        }
+        return try await fetchLibraryStats(
+            session: userSession,
+            libraryID: primaryLibrary.id,
+            libraryName: primaryLibrary.name ?? "Library"
+        )
+    }
+
+    func fetchLibraryStats(session userSession: UserSession, libraryID: String) async throws -> LibraryStatsSnapshot {
+        try await fetchLibraryStats(
+            session: userSession,
+            libraryID: libraryID,
+            libraryName: "Library"
+        )
+    }
+
     private func mapAudiobook(_ item: LibraryItem, userSession: UserSession) -> Audiobook {
         let title = item.media?.metadata?.title ?? item.media?.title ?? "Untitled"
         let author = item.media?.metadata?.authorName
@@ -404,6 +442,121 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
             title: bookmark.title?.nonEmpty ?? "Bookmark",
             time: max(bookmark.time ?? 0, 0),
             createdAt: bookmark.createdAt.flatMap { Date(millisecondsSinceEpoch: $0) }
+        )
+    }
+
+    private func mapListeningStats(_ payload: ListeningStatsResponse) -> UserListeningStats {
+        let heatmap = payload.dayOfWeek.mapValues { max($0, 0) }
+
+        let dailyTotals = payload.days.reduce(into: [DailyListeningPoint]()) { result, entry in
+            guard let date = Date.fromDayKey(entry.key) else {
+                return
+            }
+            result.append(DailyListeningPoint(date: date, seconds: max(entry.value, 0)))
+        }
+        .sorted { lhs, rhs in
+            lhs.date > rhs.date
+        }
+
+        let topItems = payload.items.map { key, value in
+            ListeningItemStat(
+                itemID: value.itemID ?? key,
+                title: value.title?.nonEmpty ?? "Unknown Item",
+                author: value.author?.nonEmpty,
+                seconds: max(value.timeListening, 0),
+                percentOfTotal: nil
+            )
+        }
+        .sorted { $0.seconds > $1.seconds }
+        .map { item in
+            var mutable = item
+            if payload.totalTime > 0 {
+                mutable.percentOfTotal = min(max(item.seconds / payload.totalTime, 0), 1)
+            }
+            return mutable
+        }
+
+        let recentSessions = payload.recentSessions
+            .map { session in
+                let id = session.id?.nonEmpty
+                    ?? "\(session.itemID ?? "unknown")-\(session.startedAt ?? 0)-\(session.updatedAt ?? 0)"
+                return ListeningSession(
+                    id: id,
+                    itemID: session.itemID,
+                    itemTitle: session.title?.nonEmpty,
+                    itemAuthor: session.author?.nonEmpty,
+                    seconds: max(session.timeListening, 0),
+                    startTime: session.startTime,
+                    currentTime: session.currentTime,
+                    startedAt: session.startedAt.map { Date(millisecondsSinceEpoch: $0) },
+                    updatedAt: session.updatedAt.map { Date(millisecondsSinceEpoch: $0) }
+                )
+            }
+            .sorted {
+                ($0.updatedAt ?? $0.startedAt ?? .distantPast) > ($1.updatedAt ?? $1.startedAt ?? .distantPast)
+            }
+
+        return UserListeningStats(
+            totalTimeSeconds: max(payload.totalTime, 0),
+            todayTimeSeconds: max(payload.today, 0),
+            dayOfWeekHeatmap: heatmap,
+            dailyTotals: dailyTotals,
+            topItems: topItems,
+            recentSessions: recentSessions
+        )
+    }
+
+    private func fetchLibraryStats(
+        session userSession: UserSession,
+        libraryID: String,
+        libraryName: String
+    ) async throws -> LibraryStatsSnapshot {
+        let request = makeAuthedRequest(
+            userSession.serverURL.appending(path: "/api/libraries/\(libraryID)/stats"),
+            token: userSession.token
+        )
+
+        let payload: LibraryStatsResponse = try await decode(request, expecting: LibraryStatsResponse.self)
+
+        return LibraryStatsSnapshot(
+            libraryID: libraryID,
+            libraryName: libraryName,
+            totalItems: max(payload.totalItems, 0),
+            totalDurationSeconds: max(payload.totalDuration, 0),
+            totalSizeBytes: max(payload.totalSize, 0),
+            totalAuthors: max(payload.totalAuthors, 0),
+            totalGenres: max(payload.totalGenres, 0),
+            numAudioTracks: max(payload.numAudioTracks, 0),
+            largestItems: payload.largestItems.map {
+                LibraryItemStat(
+                    itemID: $0.id,
+                    title: $0.title.nonEmpty ?? "Unknown Item",
+                    sizeBytes: $0.size.map { max($0, 0) },
+                    durationSeconds: $0.duration.map { max($0, 0) }
+                )
+            },
+            longestItems: payload.longestItems.map {
+                LibraryItemStat(
+                    itemID: $0.id,
+                    title: $0.title.nonEmpty ?? "Unknown Item",
+                    sizeBytes: $0.size.map { max($0, 0) },
+                    durationSeconds: $0.duration.map { max($0, 0) }
+                )
+            },
+            authorsWithCount: payload.authorsWithCount.map {
+                NamedCountStat(
+                    id: $0.id ?? $0.name,
+                    name: $0.name,
+                    count: max($0.count, 0)
+                )
+            },
+            genresWithCount: payload.genresWithCount.map {
+                NamedCountStat(
+                    id: $0.id ?? $0.genre,
+                    name: $0.genre,
+                    count: max($0.count, 0)
+                )
+            }
         )
     }
 
@@ -869,6 +1022,85 @@ struct MockAudiobookshelfAPI: AudiobookshelfAPI {
         )
     }
 
+    func fetchMyListeningStats(session: UserSession, days _: Int?) async throws -> UserListeningStats {
+        guard !session.token.isEmpty else {
+            throw APIError.unauthorized
+        }
+        return UserListeningStats(
+            totalTimeSeconds: 24_000,
+            todayTimeSeconds: 1_200,
+            dayOfWeekHeatmap: [1: 3_600, 2: 4_200, 3: 2_400],
+            dailyTotals: [
+                DailyListeningPoint(date: Date(timeIntervalSince1970: 1_772_000_000), seconds: 1_200),
+                DailyListeningPoint(date: Date(timeIntervalSince1970: 1_771_913_600), seconds: 3_600),
+            ],
+            topItems: [
+                ListeningItemStat(
+                    itemID: "book-columbus-day",
+                    title: "Columbus Day",
+                    author: "Craig Alanson",
+                    seconds: 9_000,
+                    percentOfTotal: 0.375
+                ),
+            ],
+            recentSessions: [
+                ListeningSession(
+                    id: "session-1",
+                    itemID: "book-columbus-day",
+                    itemTitle: "Columbus Day",
+                    itemAuthor: "Craig Alanson",
+                    seconds: 1_200,
+                    startTime: 120,
+                    currentTime: 1_320,
+                    startedAt: Date(timeIntervalSince1970: 1_772_000_000),
+                    updatedAt: Date(timeIntervalSince1970: 1_772_001_200)
+                ),
+            ]
+        )
+    }
+
+    func fetchPrimaryLibraryStats(session: UserSession) async throws -> LibraryStatsSnapshot? {
+        try await fetchLibraryStats(session: session, libraryID: "library-1")
+    }
+
+    func fetchLibraryStats(session: UserSession, libraryID: String) async throws -> LibraryStatsSnapshot {
+        guard !session.token.isEmpty else {
+            throw APIError.unauthorized
+        }
+        return LibraryStatsSnapshot(
+            libraryID: libraryID,
+            libraryName: "Audiobooks",
+            totalItems: 444,
+            totalDurationSeconds: 22_055_931,
+            totalSizeBytes: 214_133_179_595,
+            totalAuthors: 119,
+            totalGenres: 53,
+            numAudioTracks: 13_576,
+            largestItems: [
+                LibraryItemStat(
+                    itemID: "book-columbus-day",
+                    title: "Columbus Day",
+                    sizeBytes: 1_110_000_000,
+                    durationSeconds: nil
+                ),
+            ],
+            longestItems: [
+                LibraryItemStat(
+                    itemID: "book-columbus-day",
+                    title: "Columbus Day",
+                    sizeBytes: nil,
+                    durationSeconds: 57_600
+                ),
+            ],
+            authorsWithCount: [
+                NamedCountStat(id: "author-1", name: "Craig Alanson", count: 2),
+            ],
+            genresWithCount: [
+                NamedCountStat(id: "genre-1", name: "Audiobook", count: 10),
+            ]
+        )
+    }
+
     func fetchMediaProgress(session: UserSession, itemID: String) async throws -> PlaybackProgress? {
         guard !session.token.isEmpty else {
             throw APIError.unauthorized
@@ -1007,6 +1239,7 @@ private struct LoginResponse: Decodable {
 
 private struct LibrarySummary: Decodable {
     let id: String
+    let name: String?
     let mediaType: String?
 }
 
@@ -1021,6 +1254,199 @@ private struct LibraryItem: Decodable {
     let mediaProgress: MediaProgressPayload?
     let userMediaProgress: MediaProgressPayload?
     let media: LibraryItemMedia?
+}
+
+private struct ListeningStatsResponse: Decodable {
+    let totalTime: TimeInterval
+    let today: TimeInterval
+    let dayOfWeek: [Int: TimeInterval]
+    let days: [String: TimeInterval]
+    let items: [String: ListeningStatsItemPayload]
+    let recentSessions: [ListeningSessionPayload]
+
+    private enum CodingKeys: String, CodingKey {
+        case totalTime
+        case today
+        case dayOfWeek
+        case days
+        case items
+        case recentSessions
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        totalTime = container.decodeLossyTimeInterval(forKey: .totalTime) ?? 0
+        today = container.decodeLossyTimeInterval(forKey: .today) ?? 0
+        dayOfWeek = container.decodeLossyDayOfWeekMap(forKey: .dayOfWeek)
+        days = container.decodeLossyTimeIntervalMap(forKey: .days)
+        items = container.decodeLossyDictionary(forKey: .items)
+        recentSessions = container.decodeLossyArray(forKey: .recentSessions)
+    }
+}
+
+private struct ListeningStatsItemPayload: Decodable {
+    let itemID: String?
+    let timeListening: TimeInterval
+    let title: String?
+    let author: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case itemID = "id"
+        case timeListening
+        case mediaMetadata
+        case title
+        case author
+        case authorName
+    }
+
+    private struct MediaMetadata: Decodable {
+        let title: String?
+        let author: String?
+        let authorName: String?
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        itemID = try container.decodeIfPresent(String.self, forKey: .itemID)
+        timeListening = container.decodeLossyTimeInterval(forKey: .timeListening) ?? 0
+
+        let metadata = try container.decodeIfPresent(MediaMetadata.self, forKey: .mediaMetadata)
+        let fallbackTitle = try container.decodeIfPresent(String.self, forKey: .title)
+        title = metadata?.title ?? fallbackTitle
+
+        if let authorFromMetadata = metadata?.author ?? metadata?.authorName {
+            author = authorFromMetadata
+        } else {
+            let authorValue = try container.decodeIfPresent(String.self, forKey: .author)
+            let authorNameValue = try container.decodeIfPresent(String.self, forKey: .authorName)
+            author = authorValue ?? authorNameValue
+        }
+    }
+}
+
+private struct ListeningSessionPayload: Decodable {
+    let id: String?
+    let itemID: String?
+    let title: String?
+    let author: String?
+    let timeListening: TimeInterval
+    let startTime: TimeInterval?
+    let currentTime: TimeInterval?
+    let startedAt: Int64?
+    let updatedAt: Int64?
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case itemID = "libraryItemId"
+        case itemIDAlternate = "itemId"
+        case mediaMetadata
+        case title
+        case author
+        case authorName
+        case displayTitle
+        case displayAuthor
+        case timeListening
+        case startTime
+        case currentTime
+        case startedAt
+        case updatedAt
+    }
+
+    private struct SessionMetadata: Decodable {
+        let title: String?
+        let author: String?
+        let authorName: String?
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        id = try container.decodeIfPresent(String.self, forKey: .id)
+        itemID = try container.decodeIfPresent(String.self, forKey: .itemID)
+            ?? container.decodeIfPresent(String.self, forKey: .itemIDAlternate)
+
+        let metadata = try container.decodeIfPresent(SessionMetadata.self, forKey: .mediaMetadata)
+        let displayTitle = try container.decodeIfPresent(String.self, forKey: .displayTitle)
+        let titleValue = try container.decodeIfPresent(String.self, forKey: .title)
+        let displayAuthor = try container.decodeIfPresent(String.self, forKey: .displayAuthor)
+        let authorValue = try container.decodeIfPresent(String.self, forKey: .author)
+        let authorNameValue = try container.decodeIfPresent(String.self, forKey: .authorName)
+
+        title = metadata?.title ?? displayTitle ?? titleValue
+        author = metadata?.author
+            ?? metadata?.authorName
+            ?? displayAuthor
+            ?? authorValue
+            ?? authorNameValue
+
+        timeListening = container.decodeLossyTimeInterval(forKey: .timeListening) ?? 0
+        startTime = container.decodeLossyTimeInterval(forKey: .startTime)
+        currentTime = container.decodeLossyTimeInterval(forKey: .currentTime)
+        startedAt = container.decodeLossyInt64(forKey: .startedAt)
+        updatedAt = container.decodeLossyInt64(forKey: .updatedAt)
+    }
+}
+
+private struct LibraryStatsResponse: Decodable {
+    let totalItems: Int
+    let totalDuration: TimeInterval
+    let totalSize: Int64
+    let totalAuthors: Int
+    let totalGenres: Int
+    let numAudioTracks: Int
+    let longestItems: [LibraryStatsItemPayload]
+    let largestItems: [LibraryStatsItemPayload]
+    let authorsWithCount: [LibraryNamedCountPayload]
+    let genresWithCount: [LibraryGenreCountPayload]
+
+    private enum CodingKeys: String, CodingKey {
+        case totalItems
+        case totalDuration
+        case totalSize
+        case totalAuthors
+        case totalGenres
+        case numAudioTracks
+        case numAudioTrack
+        case longestItems
+        case largestItems
+        case authorsWithCount
+        case genresWithCount
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        totalItems = container.decodeLossyInt(forKey: .totalItems) ?? 0
+        totalDuration = container.decodeLossyTimeInterval(forKey: .totalDuration) ?? 0
+        totalSize = container.decodeLossyInt64(forKey: .totalSize) ?? 0
+        totalAuthors = container.decodeLossyInt(forKey: .totalAuthors) ?? 0
+        totalGenres = container.decodeLossyInt(forKey: .totalGenres) ?? 0
+        numAudioTracks = container.decodeLossyInt(forKey: .numAudioTracks)
+            ?? container.decodeLossyInt(forKey: .numAudioTrack)
+            ?? 0
+        longestItems = container.decodeLossyArray(forKey: .longestItems)
+        largestItems = container.decodeLossyArray(forKey: .largestItems)
+        authorsWithCount = container.decodeLossyArray(forKey: .authorsWithCount)
+        genresWithCount = container.decodeLossyArray(forKey: .genresWithCount)
+    }
+}
+
+private struct LibraryStatsItemPayload: Decodable {
+    let id: String
+    let title: String
+    let size: Int64?
+    let duration: TimeInterval?
+}
+
+private struct LibraryNamedCountPayload: Decodable {
+    let id: String?
+    let name: String
+    let count: Int
+}
+
+private struct LibraryGenreCountPayload: Decodable {
+    let id: String?
+    let genre: String
+    let count: Int
 }
 
 private typealias MediaProgressResponse = MediaProgressPayload
@@ -1131,10 +1557,12 @@ private struct ItemDetailsMetadata: Decodable {
         description = try container.decodeIfPresent(String.self, forKey: .description)
         descriptionPlain = try container.decodeIfPresent(String.self, forKey: .descriptionPlain)
 
-        if let yearString = try container.decodeIfPresent(String.self, forKey: .publishedYear) {
+        if let yearString = (try? container.decodeIfPresent(String.self, forKey: .publishedYear)) ?? nil {
             publishedYear = yearString
-        } else if let yearInt = try container.decodeIfPresent(Int.self, forKey: .publishedYear) {
+        } else if let yearInt = (try? container.decodeIfPresent(Int.self, forKey: .publishedYear)) ?? nil {
             publishedYear = String(yearInt)
+        } else if let yearDouble = (try? container.decodeIfPresent(Double.self, forKey: .publishedYear)) ?? nil {
+            publishedYear = String(Int(yearDouble.rounded()))
         } else {
             publishedYear = nil
         }
@@ -1270,6 +1698,100 @@ private struct LibraryItemWrapper: Decodable {
     let libraryItem: LibraryItem?
 }
 
+private struct LossyNumber: Decodable {
+    let value: TimeInterval
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let doubleValue = try? container.decode(Double.self) {
+            value = doubleValue
+            return
+        }
+        if let intValue = try? container.decode(Int.self) {
+            value = TimeInterval(intValue)
+            return
+        }
+        if let int64Value = try? container.decode(Int64.self) {
+            value = TimeInterval(int64Value)
+            return
+        }
+        if let stringValue = try? container.decode(String.self),
+           let parsed = TimeInterval(stringValue)
+        {
+            value = parsed
+            return
+        }
+        throw DecodingError.dataCorruptedError(in: container, debugDescription: "Expected numeric value")
+    }
+}
+
+private struct LossyDecodable<Value: Decodable>: Decodable {
+    let value: Value?
+
+    init(from decoder: Decoder) throws {
+        value = try? Value(from: decoder)
+    }
+}
+
+private extension KeyedDecodingContainer {
+    func decodeLossyTimeInterval(forKey key: Key) -> TimeInterval? {
+        guard let number = (try? decodeIfPresent(LossyNumber.self, forKey: key)) ?? nil else {
+            return nil
+        }
+        return number.value
+    }
+
+    func decodeLossyInt(forKey key: Key) -> Int? {
+        guard let raw = decodeLossyTimeInterval(forKey: key) else {
+            return nil
+        }
+        return Int(raw.rounded())
+    }
+
+    func decodeLossyInt64(forKey key: Key) -> Int64? {
+        guard let raw = decodeLossyTimeInterval(forKey: key) else {
+            return nil
+        }
+        return Int64(raw.rounded())
+    }
+
+    func decodeLossyTimeIntervalMap(forKey key: Key) -> [String: TimeInterval] {
+        guard let decoded = (try? decodeIfPresent([String: LossyNumber].self, forKey: key)) ?? nil else {
+            return [:]
+        }
+        return decoded.mapValues(\.value)
+    }
+
+    func decodeLossyDayOfWeekMap(forKey key: Key) -> [Int: TimeInterval] {
+        guard let decoded = (try? decodeIfPresent([String: LossyNumber].self, forKey: key)) ?? nil else {
+            return [:]
+        }
+        return decoded.reduce(into: [Int: TimeInterval]()) { result, entry in
+            if let weekday = Int(entry.key) {
+                result[weekday] = entry.value.value
+            }
+        }
+    }
+
+    func decodeLossyArray<Element: Decodable>(forKey key: Key) -> [Element] {
+        guard let decoded = (try? decodeIfPresent([LossyDecodable<Element>].self, forKey: key)) ?? nil else {
+            return []
+        }
+        return decoded.compactMap(\.value)
+    }
+
+    func decodeLossyDictionary<Value: Decodable>(forKey key: Key) -> [String: Value] {
+        guard let decoded = (try? decodeIfPresent([String: LossyDecodable<Value>].self, forKey: key)) ?? nil else {
+            return [:]
+        }
+        return decoded.reduce(into: [String: Value]()) { result, entry in
+            if let value = entry.value.value {
+                result[entry.key] = value
+            }
+        }
+    }
+}
+
 private extension String {
     var nonEmpty: String? {
         let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1278,6 +1800,25 @@ private extension String {
 }
 
 private extension Date {
+    static func fromDayKey(_ value: String) -> Date? {
+        let components = value.split(separator: "-", omittingEmptySubsequences: false)
+        guard components.count == 3,
+              let year = Int(components[0]),
+              let month = Int(components[1]),
+              let day = Int(components[2])
+        else {
+            return nil
+        }
+
+        var dateComponents = DateComponents()
+        dateComponents.calendar = Calendar(identifier: .gregorian)
+        dateComponents.timeZone = TimeZone(secondsFromGMT: 0)
+        dateComponents.year = year
+        dateComponents.month = month
+        dateComponents.day = day
+        return dateComponents.date
+    }
+
     init(millisecondsSinceEpoch: Int64) {
         self = Date(timeIntervalSince1970: TimeInterval(millisecondsSinceEpoch) / 1000)
     }

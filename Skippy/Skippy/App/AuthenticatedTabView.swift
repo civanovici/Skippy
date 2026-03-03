@@ -142,6 +142,13 @@ struct AuthenticatedTabView: View {
 
             UserView(
                 username: dependencies.authStore.session?.username ?? "Unknown",
+                makeStatsViewModel: {
+                    StatsViewModel(
+                        apiClient: dependencies.apiClient,
+                        authStore: dependencies.authStore,
+                        logger: dependencies.logger
+                    )
+                },
                 onLogout: {
                     dependencies.authStore.signOut()
                 }
