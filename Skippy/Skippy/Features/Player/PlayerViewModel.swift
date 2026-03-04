@@ -41,6 +41,8 @@ final class PlayerViewModel {
     private let nowPlayingService: NowPlayingServiceProtocol
     private let apiClient: APIClientProtocol
     private let authStore: AuthStore
+    private let downloadManager: DownloadManaging
+    private let connectivityStore: ConnectivityStore
     private let persistenceController: PersistenceController
     private let logger: Logger
 
@@ -121,6 +123,8 @@ final class PlayerViewModel {
         nowPlayingService: NowPlayingServiceProtocol,
         apiClient: APIClientProtocol,
         authStore: AuthStore,
+        downloadManager: DownloadManaging,
+        connectivityStore: ConnectivityStore,
         persistenceController: PersistenceController,
         logger: Logger
     ) {
@@ -130,6 +134,8 @@ final class PlayerViewModel {
         self.nowPlayingService = nowPlayingService
         self.apiClient = apiClient
         self.authStore = authStore
+        self.downloadManager = downloadManager
+        self.connectivityStore = connectivityStore
         self.persistenceController = persistenceController
         self.logger = logger
     }
@@ -172,8 +178,10 @@ final class PlayerViewModel {
         var remoteProgress: PlaybackProgress?
         var remoteBookmarks: [AudioBookmark] = []
         var remoteTracks: [AudiobookTrack] = []
+        let localTracks = downloadManager.localTracks(for: audiobook.id)
+        let shouldUseOffline = connectivityStore.isOfflineEffective
 
-        if let session = authStore.session {
+        if !shouldUseOffline, let session = authStore.session {
             remoteProgress = try? await apiClient.audiobookshelf.fetchMediaProgress(
                 session: session,
                 itemID: audiobook.id
@@ -187,6 +195,9 @@ final class PlayerViewModel {
                 }
                 remoteBookmarks = details.bookmarks
                 remoteTracks = details.tracks
+            }
+            if remoteProgress != nil || !remoteTracks.isEmpty {
+                connectivityStore.markServerReachable()
             }
         }
 
@@ -215,9 +226,9 @@ final class PlayerViewModel {
             audiobook: audiobook,
             chapter: currentChapter,
             initialTime: chosenProgress.positionSeconds,
-            tracks: remoteTracks
+            tracks: localTracks.isEmpty ? remoteTracks : localTracks
         )
-        tracks = remoteTracks
+        tracks = localTracks.isEmpty ? remoteTracks : localTracks
         duration = max(playerService.duration, chosenProgress.durationSeconds)
         currentTime = min(chosenProgress.positionSeconds, max(duration, chosenProgress.positionSeconds))
         isPlaying = false

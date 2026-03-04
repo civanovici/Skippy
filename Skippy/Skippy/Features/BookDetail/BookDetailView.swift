@@ -8,6 +8,7 @@ struct BookDetailView: View {
     @State private var inlinePlayerViewModel: PlayerViewModel?
     @State private var scrubTime: TimeInterval?
     @State private var isScrubbing = false
+    @State private var deleteDownloadConfirmationPresented = false
 
     private static let shortDurationFormatter: DateComponentsFormatter = {
         let formatter = DateComponentsFormatter()
@@ -43,6 +44,15 @@ struct BookDetailView: View {
         }
         .navigationTitle(viewModel.book.title)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if viewModel.isOfflineMode {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Label("Offline", systemImage: "wifi.slash")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.orange)
+                }
+            }
+        }
         .overlay {
             if viewModel.isLoading {
                 ProgressView("Loading details…")
@@ -52,11 +62,13 @@ struct BookDetailView: View {
         }
         .task {
             await viewModel.load()
+            ensureInlinePlayerInitialized()
         }
         .alert("Unable to Load Details", isPresented: errorAlertIsPresented) {
             Button("Retry") {
                 Task {
                     await viewModel.load()
+                    ensureInlinePlayerInitialized()
                 }
             }
             Button("Dismiss", role: .cancel) {}
@@ -77,11 +89,31 @@ struct BookDetailView: View {
                 Text("Choose which position to keep.")
             }
         }
+        .alert("Delete Download?", isPresented: $deleteDownloadConfirmationPresented) {
+            Button("Delete", role: .destructive) {
+                viewModel.deleteDownload()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will remove the downloaded audio from this device.")
+        }
     }
 
     private var topSummary: some View {
         HStack(alignment: .top, spacing: 14) {
             BookCardView(book: viewModel.book)
+                .overlay(alignment: .bottomTrailing) {
+                    if viewModel.isDownloaded {
+                        Label("Offline", systemImage: "arrow.down.circle.fill")
+                            .font(.caption2.weight(.semibold))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(.blue.opacity(0.9))
+                            .foregroundStyle(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .padding(6)
+                    }
+                }
                 .frame(width: 110)
 
             VStack(alignment: .leading, spacing: 4) {
@@ -112,6 +144,8 @@ struct BookDetailView: View {
 
     private var controlsRow: some View {
         VStack(alignment: .leading, spacing: 14) {
+            downloadControls
+
             if let player = inlinePlayerViewModel {
                 VStack(spacing: 8) {
                     Slider(
@@ -214,12 +248,56 @@ struct BookDetailView: View {
                     .buttonStyle(.bordered)
                 }
             } else {
-                Button {
-                    startInlinePlayer(with: viewModel.resumeChapter, autoplay: true)
+                ProgressView("Preparing player…")
+                    .font(.caption)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var downloadControls: some View {
+        let record = viewModel.downloadRecord
+        let progressPercent = Int((record?.progress ?? 0) * 100)
+
+        HStack(spacing: 10) {
+            if viewModel.isDownloaded {
+                Button(role: .destructive) {
+                    deleteDownloadConfirmationPresented = true
                 } label: {
-                    Label("Start Playback", systemImage: "play.fill")
+                    Label("Delete Download", systemImage: "trash")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.bordered)
+            } else {
+                switch record?.state {
+                case .downloading:
+                    Button {
+                        viewModel.pauseDownload()
+                    } label: {
+                        Label("Pause Download", systemImage: "pause.fill")
+                    }
+                    .buttonStyle(.bordered)
+                case .paused:
+                    Button {
+                        viewModel.resumeDownload()
+                    } label: {
+                        Label("Resume Download", systemImage: "play.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                default:
+                    Button {
+                        viewModel.startDownload()
+                    } label: {
+                        Label("Download", systemImage: "arrow.down.circle")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(viewModel.tracks.isEmpty)
+                }
+            }
+
+            if let record, record.state != .completed {
+                Text("\(progressPercent)%")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -342,6 +420,11 @@ struct BookDetailView: View {
         }
     }
 
+    private func ensureInlinePlayerInitialized() {
+        guard inlinePlayerViewModel == nil else { return }
+        startInlinePlayer(with: viewModel.resumeChapter, autoplay: false)
+    }
+
     private func rateLabel(for rate: Float) -> String {
         String(format: "%.2gx", rate)
     }
@@ -382,12 +465,16 @@ struct BookDetailView: View {
 
 #Preview {
     let book = Audiobook.mockLibrary.first!
+    let downloadManager = DownloadManager()
+    let connectivityStore = ConnectivityStore()
     return NavigationStack {
         BookDetailView(
             viewModel: BookDetailViewModel(
                 book: book,
                 apiClient: APIClient(audiobookshelf: MockAudiobookshelfAPI()),
                 authStore: AuthStore.previewAuthenticated,
+                downloadManager: downloadManager,
+                connectivityStore: connectivityStore,
                 persistenceController: PersistenceController(),
                 logger: Logger()
             ),
@@ -399,6 +486,8 @@ struct BookDetailView: View {
                     nowPlayingService: NowPlayingService(),
                     apiClient: APIClient(audiobookshelf: MockAudiobookshelfAPI()),
                     authStore: AuthStore.previewAuthenticated,
+                    downloadManager: downloadManager,
+                    connectivityStore: connectivityStore,
                     persistenceController: PersistenceController(),
                     logger: Logger()
                 )

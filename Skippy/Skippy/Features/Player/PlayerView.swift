@@ -240,6 +240,8 @@ struct PlayerView: View {
                 nowPlayingService: NowPlayingService(),
                 apiClient: APIClient(audiobookshelf: MockAudiobookshelfAPI()),
                 authStore: AuthStore.previewAuthenticated,
+                downloadManager: DownloadManager(),
+                connectivityStore: ConnectivityStore(),
                 persistenceController: PersistenceController(),
                 logger: Logger()
             )

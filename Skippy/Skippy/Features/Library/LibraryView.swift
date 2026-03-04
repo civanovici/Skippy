@@ -1,8 +1,10 @@
 import SwiftUI
 
 struct LibraryView: View {
+    @Environment(AppDependencies.self) private var dependencies
     @State var viewModel: LibraryViewModel
     @State private var searchText = ""
+    @State private var showDownloadedOnly = false
 
     let makeBookDetailViewModel: (Audiobook) -> BookDetailViewModel
     let makePlayerViewModel: (Audiobook, Chapter?) -> PlayerViewModel
@@ -40,7 +42,7 @@ struct LibraryView: View {
                                         }
                                     )
                                 } label: {
-                                    BookCardView(book: book)
+                                    BookCardView(book: book, isDownloaded: downloadedBookIDs.contains(book.id))
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -51,8 +53,11 @@ struct LibraryView: View {
                 }
             }
             .navigationTitle("Library")
-            .searchable(text: $searchText, prompt: "Search library")
+            .searchableIf(!viewModel.isOfflineMode, text: $searchText, prompt: "Search library")
             .task(id: searchText) {
+                guard !viewModel.isOfflineMode else {
+                    return
+                }
                 try? await Task.sleep(for: .milliseconds(300))
                 guard !Task.isCancelled else {
                     return
@@ -65,12 +70,34 @@ struct LibraryView: View {
                         ProgressView()
                     }
                 }
+                ToolbarItem(placement: .topBarLeading) {
+                    if viewModel.isOfflineMode {
+                        Label("Offline", systemImage: "wifi.slash")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.orange)
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showDownloadedOnly.toggle()
+                    } label: {
+                        Image(systemName: effectiveDownloadedOnly ? "arrow.down.circle.fill" : "arrow.down.circle")
+                    }
+                    .help("Show downloaded only")
+                    .disabled(viewModel.isOfflineMode)
+                }
             }
             .task {
                 await viewModel.load()
             }
             .refreshable {
                 await viewModel.load()
+            }
+            .onChange(of: viewModel.isOfflineMode) { _, isOffline in
+                if isOffline {
+                    showDownloadedOnly = true
+                    searchText = ""
+                }
             }
         }
     }
@@ -83,24 +110,47 @@ struct LibraryView: View {
 
     private var filteredBooks: [Audiobook] {
         guard !searchQuery.isEmpty else {
-            return viewModel.books
+            return applyDownloadedFilter(viewModel.books)
         }
-        return viewModel.searchResults
+        return applyDownloadedFilter(viewModel.searchResults)
     }
 
     private var searchQuery: String {
         searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
+    private var downloadedBookIDs: Set<String> {
+        dependencies.downloadManager.fullyDownloadedBookIDs
+    }
+
+    private var effectiveDownloadedOnly: Bool {
+        viewModel.isOfflineMode || showDownloadedOnly
+    }
+
+    private func applyDownloadedFilter(_ books: [Audiobook]) -> [Audiobook] {
+        guard effectiveDownloadedOnly else {
+            return books
+        }
+        return books.filter { downloadedBookIDs.contains($0.id) }
+    }
 }
 
 #Preview {
     LibraryView(
-        viewModel: LibraryViewModel(apiClient: APIClient(audiobookshelf: MockAudiobookshelfAPI()), authStore: AuthStore.previewAuthenticated, logger: Logger()),
+        viewModel: LibraryViewModel(
+            apiClient: APIClient(audiobookshelf: MockAudiobookshelfAPI()),
+            authStore: AuthStore.previewAuthenticated,
+            downloadManager: DownloadManager(),
+            connectivityStore: ConnectivityStore(),
+            logger: Logger()
+        ),
         makeBookDetailViewModel: {
             BookDetailViewModel(
                 book: $0,
                 apiClient: APIClient(audiobookshelf: MockAudiobookshelfAPI()),
                 authStore: AuthStore.previewAuthenticated,
+                downloadManager: DownloadManager(),
+                connectivityStore: ConnectivityStore(),
                 persistenceController: PersistenceController(),
                 logger: Logger()
             )
@@ -113,6 +163,8 @@ struct LibraryView: View {
                 nowPlayingService: NowPlayingService(),
                 apiClient: APIClient(audiobookshelf: MockAudiobookshelfAPI()),
                 authStore: AuthStore.previewAuthenticated,
+                downloadManager: DownloadManager(),
+                connectivityStore: ConnectivityStore(),
                 persistenceController: PersistenceController(),
                 logger: Logger()
             )

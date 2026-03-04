@@ -18,6 +18,8 @@ final class BookDetailViewModel {
 
     private let apiClient: APIClientProtocol
     private let authStore: AuthStore
+    private let downloadManager: DownloadManaging
+    private let connectivityStore: ConnectivityStore
     private let persistenceController: PersistenceController
     private let logger: Logger
     private var loadRequestID = 0
@@ -41,12 +43,16 @@ final class BookDetailViewModel {
         book: Audiobook,
         apiClient: APIClientProtocol,
         authStore: AuthStore,
+        downloadManager: DownloadManaging,
+        connectivityStore: ConnectivityStore,
         persistenceController: PersistenceController,
         logger: Logger
     ) {
         self.book = book
         self.apiClient = apiClient
         self.authStore = authStore
+        self.downloadManager = downloadManager
+        self.connectivityStore = connectivityStore
         self.persistenceController = persistenceController
         self.logger = logger
     }
@@ -55,11 +61,13 @@ final class BookDetailViewModel {
         loadRequestID += 1
         let requestID = loadRequestID
 
+        if !connectivityStore.isNetworkReachable {
+            loadOfflineDetailsIfAvailable(for: requestID)
+            return
+        }
+
         guard let session = authStore.session else {
-            if requestID == loadRequestID {
-                errorMessage = "You are not signed in."
-                isLoading = false
-            }
+            loadOfflineDetailsIfAvailable(for: requestID)
             return
         }
 
@@ -74,12 +82,18 @@ final class BookDetailViewModel {
                 return
             }
             details = fetched
+            connectivityStore.markServerReachable()
         } catch {
             guard requestID == loadRequestID else {
                 return
             }
-            logger.error("Book details fetch failed: \(error.localizedDescription)")
-            errorMessage = error.localizedDescription
+            connectivityStore.reportResult(.failure(error))
+            if connectivityStore.isOfflineEffective {
+                loadOfflineDetailsIfAvailable(for: requestID)
+            } else {
+                logger.error("Book details fetch failed: \(error.localizedDescription)")
+                errorMessage = error.localizedDescription
+            }
         }
 
         if requestID == loadRequestID {
@@ -140,11 +154,42 @@ final class BookDetailViewModel {
     }
 
     var tracks: [AudiobookTrack] {
-        details?.tracks ?? []
+        details?.tracks ?? downloadManager.localTracks(for: book.id)
     }
 
     var resumeChapter: Chapter? {
         displayChapters.first
+    }
+
+    var isOfflineMode: Bool {
+        connectivityStore.isOfflineEffective
+    }
+
+    var downloadRecord: DownloadRecord? {
+        downloadManager.record(for: book.id)
+    }
+
+    var isDownloaded: Bool {
+        downloadManager.isDownloaded(audiobookID: book.id)
+    }
+
+    func startDownload() {
+        guard let details else {
+            return
+        }
+        downloadManager.enqueue(book, details: details)
+    }
+
+    func pauseDownload() {
+        downloadManager.pause(audiobookID: book.id)
+    }
+
+    func resumeDownload() {
+        downloadManager.resume(audiobookID: book.id)
+    }
+
+    func deleteDownload() {
+        downloadManager.deleteDownload(audiobookID: book.id)
     }
 
     func chapterProgressState(for chapter: Chapter) -> ChapterProgressState {
@@ -189,5 +234,14 @@ final class BookDetailViewModel {
         case (nil, nil):
             return nil
         }
+    }
+
+    private func loadOfflineDetailsIfAvailable(for requestID: Int) {
+        guard requestID == loadRequestID else {
+            return
+        }
+        details = downloadManager.localDetails(for: book.id)
+        errorMessage = nil
+        isLoading = false
     }
 }

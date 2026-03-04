@@ -60,8 +60,6 @@ final class PlayerService: PlayerServiceProtocol {
     private var stalledObserverToken: NSObjectProtocol?
     private var failedToEndObserverToken: NSObjectProtocol?
     private var didEnterBackgroundObserverToken: NSObjectProtocol?
-    private var willResignActiveObserverToken: NSObjectProtocol?
-    private var timeControlStatusObservation: NSKeyValueObservation?
     private var reasonForWaitingObservation: NSKeyValueObservation?
     private var wasPlayingBeforeInterruption = false
 
@@ -73,7 +71,6 @@ final class PlayerService: PlayerServiceProtocol {
         installAudioLifecycleObservers()
         configureRemoteCommands()
         installAppLifecycleObserver()
-        installDiagnosticObservers()
     }
 
     deinit {
@@ -98,11 +95,7 @@ final class PlayerService: PlayerServiceProtocol {
         if let didEnterBackgroundObserverToken {
             NotificationCenter.default.removeObserver(didEnterBackgroundObserverToken)
         }
-        if let willResignActiveObserverToken {
-            NotificationCenter.default.removeObserver(willResignActiveObserverToken)
-        }
         itemStatusObservation = nil
-        timeControlStatusObservation = nil
         reasonForWaitingObservation = nil
     }
 
@@ -305,39 +298,6 @@ final class PlayerService: PlayerServiceProtocol {
                 self.player.play()
                 self.player.rate = self.rate
             }
-        }
-    }
-
-    private func installDiagnosticObservers() {
-        timeControlStatusObservation = player.observe(\.timeControlStatus, options: [.new, .old]) { [weak self] player, change in
-            let oldVal = change.oldValue.map { "\($0.rawValue)" } ?? "nil"
-            let newVal = change.newValue.map { "\($0.rawValue)" } ?? "nil"
-            let statusName: String
-            switch player.timeControlStatus {
-            case .paused: statusName = "PAUSED"
-            case .waitingToPlayAtSpecifiedRate: statusName = "WAITING"
-            case .playing: statusName = "PLAYING"
-            @unknown default: statusName = "UNKNOWN"
-            }
-            let reason = player.reasonForWaitingToPlay?.rawValue ?? "none"
-            let audioActive = AVAudioSession.sharedInstance().isOtherAudioPlaying
-            let category = AVAudioSession.sharedInstance().category.rawValue
-            let itemStatus = player.currentItem?.status.rawValue ?? -1
-            print("[PlayerService] timeControlStatus: \(oldVal)->\(newVal) (\(statusName)), reason: \(reason), audioSession: \(category), otherAudio: \(audioActive), itemStatus: \(itemStatus), rate: \(player.rate)")
-            _ = self
-        }
-
-        willResignActiveObserverToken = NotificationCenter.default.addObserver(
-            forName: UIApplication.willResignActiveNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            guard let self else { return }
-            let status = self.player.timeControlStatus.rawValue
-            let rate = self.player.rate
-            let hasItem = self.player.currentItem != nil
-            let itemStatus = self.player.currentItem?.status.rawValue ?? -1
-            print("[PlayerService] willResignActive — isPlaying: \(self.isPlaying), timeControl: \(status), rate: \(rate), hasItem: \(hasItem), itemStatus: \(itemStatus)")
         }
     }
 
