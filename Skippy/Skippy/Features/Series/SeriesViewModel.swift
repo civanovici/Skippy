@@ -47,7 +47,9 @@ final class SeriesViewModel {
             return
         }
 
-        isLoading = true
+        // Block the UI only on the first load. Reloads (e.g. returning from a book)
+        // refresh in place so the list keeps its scroll position.
+        isLoading = series.isEmpty
         errorMessage = nil
         defer { isLoading = false }
 
@@ -60,7 +62,9 @@ final class SeriesViewModel {
             if isOfflineMode {
                 loadOfflineSeries()
             } else {
-                errorMessage = error.localizedDescription
+                if series.isEmpty {
+                    errorMessage = error.localizedDescription
+                }
                 logger.error("Series fetch failed: \(error.localizedDescription)")
             }
         }

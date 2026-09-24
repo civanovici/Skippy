@@ -901,6 +901,143 @@ struct SkippyTests {
         #expect(viewModel.isSearching == false)
     }
 
+    // Reloading a list that already has content must not swap it for the full-screen
+    // loading/error state, otherwise the ScrollView is rebuilt and loses its position.
+    @Test
+    func seriesViewModelReloadKeepsContentVisible() async throws {
+        let authStore = signedInAuthStore()
+        let shelf = HomeShelf(id: "s1", title: "Series", books: [
+            Audiobook(id: "b1", title: "One", author: "A", progress: 0, coverURL: nil, chapters: []),
+        ])
+        let probe = LoadingProbe()
+        let api = StubAudiobookshelfAPI(fetchSeriesImpl: { _ in
+            await probe.record()
+            return [shelf]
+        })
+        let viewModel = SeriesViewModel(
+            apiClient: StubAPIClient(audiobookshelf: api),
+            authStore: authStore,
+            downloadManager: DownloadManager(),
+            connectivityStore: ConnectivityStore(),
+            logger: Logger()
+        )
+        probe.isLoading = { viewModel.isLoading }
+
+        await viewModel.load()
+        await viewModel.load()
+
+        #expect(probe.observed == [true, false])
+        #expect(viewModel.series == [shelf])
+        #expect(viewModel.isLoading == false)
+    }
+
+    @Test
+    func seriesViewModelReloadFailureKeepsExistingContent() async throws {
+        let authStore = signedInAuthStore()
+        let shelf = HomeShelf(id: "s1", title: "Series", books: [
+            Audiobook(id: "b1", title: "One", author: "A", progress: 0, coverURL: nil, chapters: []),
+        ])
+        let calls = CallCounter()
+        let api = StubAudiobookshelfAPI(fetchSeriesImpl: { _ in
+            if await calls.next() == 1 {
+                return [shelf]
+            }
+            throw APIError.unauthorized
+        })
+        let viewModel = SeriesViewModel(
+            apiClient: StubAPIClient(audiobookshelf: api),
+            authStore: authStore,
+            downloadManager: DownloadManager(),
+            connectivityStore: ConnectivityStore(),
+            logger: Logger()
+        )
+
+        await viewModel.load()
+        await viewModel.load()
+
+        #expect(viewModel.series == [shelf])
+        #expect(viewModel.errorMessage == nil)
+    }
+
+    @Test
+    func libraryViewModelReloadKeepsContentVisible() async throws {
+        let authStore = signedInAuthStore()
+        let books = [Audiobook(id: "b1", title: "One", author: "A", progress: 0, coverURL: nil, chapters: [])]
+        let probe = LoadingProbe()
+        let api = StubAudiobookshelfAPI(fetchLibraryImpl: { _ in
+            await probe.record()
+            return books
+        })
+        let viewModel = LibraryViewModel(
+            apiClient: StubAPIClient(audiobookshelf: api),
+            authStore: authStore,
+            downloadManager: DownloadManager(),
+            connectivityStore: ConnectivityStore(),
+            logger: Logger()
+        )
+        probe.isLoading = { viewModel.isLoading }
+
+        await viewModel.load()
+        await viewModel.load()
+
+        #expect(probe.observed == [true, false])
+        #expect(viewModel.books == books)
+    }
+
+    @Test
+    func collectionsViewModelReloadKeepsContentVisible() async throws {
+        let authStore = signedInAuthStore()
+        let shelf = HomeShelf(id: "c1", title: "Collection", books: [
+            Audiobook(id: "b1", title: "One", author: "A", progress: 0, coverURL: nil, chapters: []),
+        ])
+        let probe = LoadingProbe()
+        let api = StubAudiobookshelfAPI(fetchCollectionsImpl: { _ in
+            await probe.record()
+            return [shelf]
+        })
+        let viewModel = CollectionsViewModel(
+            apiClient: StubAPIClient(audiobookshelf: api),
+            authStore: authStore,
+            downloadManager: DownloadManager(),
+            connectivityStore: ConnectivityStore(),
+            logger: Logger()
+        )
+        probe.isLoading = { viewModel.isLoading }
+
+        await viewModel.load()
+        await viewModel.load()
+
+        #expect(probe.observed == [true, false])
+        #expect(viewModel.collections == [shelf])
+    }
+
+    @Test
+    func homeViewModelReloadKeepsContentVisible() async throws {
+        let authStore = signedInAuthStore()
+        let shelf = HomeShelf(id: "h1", title: "Continue", books: [
+            Audiobook(id: "b1", title: "One", author: "A", progress: 0, coverURL: nil, chapters: []),
+        ])
+        let probe = LoadingProbe()
+        let api = StubAudiobookshelfAPI(fetchPersonalizedShelvesImpl: { _ in
+            await probe.record()
+            return [shelf]
+        })
+        let viewModel = HomeViewModel(
+            apiClient: StubAPIClient(audiobookshelf: api),
+            authStore: authStore,
+            downloadManager: DownloadManager(),
+            connectivityStore: ConnectivityStore(),
+            logger: Logger()
+        )
+        probe.isLoading = { viewModel.isLoading }
+
+        await viewModel.load()
+        await viewModel.load()
+
+        #expect(probe.observed == [true, false])
+        #expect(viewModel.shelves == [shelf])
+    }
+
     @Test
     func audiobookshelfFirst20FixtureIsValid() throws {
         let fixture = try loadFirst20Fixture()
@@ -1096,6 +1233,37 @@ private final class MockURLProtocol: URLProtocol {
     }
 
     override func stopLoading() {}
+}
+
+/// Records a view model's `isLoading` flag at the moment its fetch runs.
+@MainActor
+private final class LoadingProbe {
+    var isLoading: () -> Bool = { false }
+    private(set) var observed: [Bool] = []
+
+    func record() {
+        observed.append(isLoading())
+    }
+}
+
+private actor CallCounter {
+    private var count = 0
+
+    func next() -> Int {
+        count += 1
+        return count
+    }
+}
+
+@MainActor
+private func signedInAuthStore() -> AuthStore {
+    let authStore = AuthStore(keychainStore: InMemoryKeychainStore(), logger: Logger())
+    authStore.signIn(session: UserSession(
+        serverURL: URL(string: "http://example.test:1234")!,
+        username: "u",
+        token: "tkn"
+    ))
+    return authStore
 }
 
 private struct StubAPIClient: APIClientProtocol {

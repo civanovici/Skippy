@@ -47,7 +47,9 @@ final class LibraryViewModel {
             return
         }
 
-        isLoading = true
+        // Block the UI only on the first load. Reloads (e.g. returning from a book)
+        // refresh in place so the list keeps its scroll position.
+        isLoading = books.isEmpty
         errorMessage = nil
         defer { isLoading = false }
 
@@ -60,7 +62,9 @@ final class LibraryViewModel {
             if isOfflineMode {
                 loadOfflineBooks()
             } else {
-                errorMessage = error.localizedDescription
+                if books.isEmpty {
+                    errorMessage = error.localizedDescription
+                }
                 logger.error("Library fetch failed: \(error.localizedDescription)")
             }
         }

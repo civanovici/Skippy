@@ -47,7 +47,9 @@ final class HomeViewModel {
             return
         }
 
-        isLoading = true
+        // Block the UI only on the first load. Reloads (e.g. returning from a book)
+        // refresh in place so the list keeps its scroll position.
+        isLoading = shelves.isEmpty
         errorMessage = nil
         defer { isLoading = false }
 
@@ -60,7 +62,9 @@ final class HomeViewModel {
             if isOfflineMode {
                 loadOfflineShelves()
             } else {
-                errorMessage = error.localizedDescription
+                if shelves.isEmpty {
+                    errorMessage = error.localizedDescription
+                }
                 logger.error("Home shelf fetch failed: \(error.localizedDescription)")
             }
         }
