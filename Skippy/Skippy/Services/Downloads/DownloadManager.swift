@@ -94,11 +94,15 @@ final class DownloadManager: DownloadManaging {
     }
 
     var records: [String: DownloadRecord] = [:]
-    var downloadedBooks: [String: DownloadedBookRecord] = [:]
-
-    var fullyDownloadedBookIDs: Set<String> {
-        Set(downloadedBooks.values.filter { isBookFullyDownloaded($0) }.map(\.bookID))
+    var downloadedBooks: [String: DownloadedBookRecord] = [:] {
+        didSet {
+            refreshFullyDownloadedBookIDs(previous: oldValue)
+        }
     }
+
+    /// Cached because list views read it for every book on every render; recomputing it
+    /// meant a file-existence check per downloaded track each time.
+    private(set) var fullyDownloadedBookIDs: Set<String> = []
 
     private let fileManager: FileManager
     private let stateFileURL: URL
@@ -290,10 +294,7 @@ final class DownloadManager: DownloadManaging {
     }
 
     func isDownloaded(audiobookID: String) -> Bool {
-        guard let book = downloadedBooks[audiobookID] else {
-            return false
-        }
-        return isBookFullyDownloaded(book)
+        fullyDownloadedBookIDs.contains(audiobookID)
     }
 
     func localTracks(for audiobookID: String) -> [AudiobookTrack] {
@@ -340,7 +341,7 @@ final class DownloadManager: DownloadManaging {
 
     func downloadedLibrary() -> [Audiobook] {
         downloadedBooks.values
-            .filter { isBookFullyDownloaded($0) }
+            .filter { fullyDownloadedBookIDs.contains($0.bookID) }
             .map { book in
                 Audiobook(
                     id: book.bookID,
@@ -621,6 +622,21 @@ final class DownloadManager: DownloadManaging {
                 downloadedBooks[bookID] = book
                 recalculateRecord(for: bookID)
             }
+        }
+    }
+
+    /// Re-checks only the books whose records changed.
+    private func refreshFullyDownloadedBookIDs(previous: [String: DownloadedBookRecord]) {
+        var ids = fullyDownloadedBookIDs
+        for bookID in Set(previous.keys).union(downloadedBooks.keys) where previous[bookID] != downloadedBooks[bookID] {
+            if let book = downloadedBooks[bookID], isBookFullyDownloaded(book) {
+                ids.insert(bookID)
+            } else {
+                ids.remove(bookID)
+            }
+        }
+        if ids != fullyDownloadedBookIDs {
+            fullyDownloadedBookIDs = ids
         }
     }
 

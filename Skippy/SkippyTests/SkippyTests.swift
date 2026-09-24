@@ -338,6 +338,51 @@ struct SkippyTests {
         #expect(viewModel.isLoading == false)
     }
 
+    // List views read `fullyDownloadedBookIDs` once per book on every render; it must not
+    // re-check every downloaded track on disk each time (that made the Offline view stall).
+    @Test
+    func fullyDownloadedBookIDsDoesNotHitDiskOnRead() throws {
+        let fileManager = CountingFileManager()
+        let manager = DownloadManager(fileManager: fileManager)
+        let trackFile = FileManager.default.temporaryDirectory.appending(path: "skippy-test-\(UUID().uuidString).mp3")
+        try Data("x".utf8).write(to: trackFile)
+        defer { try? FileManager.default.removeItem(at: trackFile) }
+
+        manager.downloadedBooks["cached-book"] = DownloadedBookRecord(
+            bookID: "cached-book",
+            title: "Cached",
+            author: "A",
+            coverURL: nil,
+            chapters: [],
+            tracks: (0..<3).map { index in
+                DownloadedTrackRecord(
+                    trackID: "t\(index)",
+                    title: "Track \(index)",
+                    startOffset: 0,
+                    duration: nil,
+                    remoteURL: URL(string: "http://example.test/t\(index)")!,
+                    localFilePath: trackFile.path,
+                    bytesDownloaded: 1,
+                    totalBytes: 1,
+                    status: .completed,
+                    resumeData: nil,
+                    errorMessage: nil
+                )
+            },
+            downloadedAt: nil
+        )
+
+        let checksBeforeReads = fileManager.fileExistsCalls
+        for _ in 0..<50 {
+            #expect(manager.fullyDownloadedBookIDs.contains("cached-book"))
+        }
+        #expect(manager.downloadedLibrary().contains { $0.id == "cached-book" })
+        #expect(fileManager.fileExistsCalls == checksBeforeReads)
+
+        manager.downloadedBooks["cached-book"]?.tracks[0].status = .failed
+        #expect(!manager.fullyDownloadedBookIDs.contains("cached-book"))
+    }
+
     @Test
     func fetchCollectionsMapsGroupedBooks() async throws {
         let session = makeSession { request in
@@ -1368,6 +1413,15 @@ private final class MockURLProtocol: URLProtocol {
     }
 
     override func stopLoading() {}
+}
+
+private final class CountingFileManager: FileManager, @unchecked Sendable {
+    private(set) var fileExistsCalls = 0
+
+    override func fileExists(atPath path: String) -> Bool {
+        fileExistsCalls += 1
+        return super.fileExists(atPath: path)
+    }
 }
 
 /// Records a view model's `isLoading` flag at the moment its fetch runs.
