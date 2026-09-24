@@ -12,9 +12,9 @@ struct CollectionsView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if viewModel.isLoading {
+                if viewModel.isLoading && !showsLocalDownloads {
                     ProgressView("Loading collections…")
-                } else if let errorMessage = viewModel.errorMessage {
+                } else if let errorMessage = viewModel.errorMessage, !showsLocalDownloads {
                     VStack(spacing: 12) {
                         ContentUnavailableView("Unable to load collections", systemImage: "wifi.exclamationmark", description: Text(errorMessage))
                         Button("Retry") {
@@ -99,6 +99,10 @@ struct CollectionsView: View {
     }
 
     private var filteredCollections: [HomeShelf] {
+        if showsLocalDownloads {
+            let downloaded = dependencies.downloadManager.downloadedLibrary()
+            return downloaded.isEmpty ? [] : [HomeShelf(id: "local-downloads", title: "Downloaded", books: downloaded)]
+        }
         let source = applyDownloadedFilter(viewModel.collections)
         guard !searchQuery.isEmpty else {
             return source
@@ -124,6 +128,12 @@ struct CollectionsView: View {
 
     private var downloadedBookIDs: Set<String> {
         dependencies.downloadManager.fullyDownloadedBookIDs
+    }
+
+    /// Downloaded-only doesn't need the server: while the first load is still pending (or
+    /// failed) show what is on the device instead of waiting for the network.
+    private var showsLocalDownloads: Bool {
+        effectiveDownloadedOnly && (viewModel.isLoading || viewModel.errorMessage != nil)
     }
 
     private var effectiveDownloadedOnly: Bool {
