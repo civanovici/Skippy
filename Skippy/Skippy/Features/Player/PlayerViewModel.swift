@@ -37,10 +37,16 @@ final class PlayerViewModel {
 
     private let audiobook: Audiobook
     private var currentChapter: Chapter?
+    // Full ordered chapter list; initialized from audiobook.chapters and updated once
+    // details are fetched in start(). Use this everywhere instead of audiobook.chapters
+    // because the Audiobook from the library list may not include chapter data.
+    private var allChapters: [Chapter]
     private let playerService: PlayerServiceProtocol
     private let nowPlayingService: NowPlayingServiceProtocol
     private let apiClient: APIClientProtocol
     private let authStore: AuthStore
+    private let downloadManager: DownloadManaging
+    private let connectivityStore: ConnectivityStore
     private let persistenceController: PersistenceController
     private let logger: Logger
 
@@ -63,7 +69,6 @@ final class PlayerViewModel {
     private var syncTask: Task<Void, Never>?
     private var syncRequestID = 0
     private var lastTickSyncTime: TimeInterval = 0
-    private var remoteSyncDisabled = false
 
     var title: String { audiobook.title }
     var subtitle: String {
@@ -84,7 +89,7 @@ final class PlayerViewModel {
         guard let chapterIndex else {
             return false
         }
-        return chapterIndex < (audiobook.chapters.count - 1)
+        return chapterIndex < (allChapters.count - 1)
     }
 
     var progressFraction: Double {
@@ -121,15 +126,20 @@ final class PlayerViewModel {
         nowPlayingService: NowPlayingServiceProtocol,
         apiClient: APIClientProtocol,
         authStore: AuthStore,
+        downloadManager: DownloadManaging,
+        connectivityStore: ConnectivityStore,
         persistenceController: PersistenceController,
         logger: Logger
     ) {
         self.audiobook = audiobook
         self.currentChapter = chapter
+        self.allChapters = audiobook.chapters
         self.playerService = playerService
         self.nowPlayingService = nowPlayingService
         self.apiClient = apiClient
         self.authStore = authStore
+        self.downloadManager = downloadManager
+        self.connectivityStore = connectivityStore
         self.persistenceController = persistenceController
         self.logger = logger
     }
@@ -172,8 +182,10 @@ final class PlayerViewModel {
         var remoteProgress: PlaybackProgress?
         var remoteBookmarks: [AudioBookmark] = []
         var remoteTracks: [AudiobookTrack] = []
+        let localTracks = downloadManager.localTracks(for: audiobook.id)
+        let shouldUseOffline = connectivityStore.isOfflineEffective
 
-        if let session = authStore.session {
+        if !shouldUseOffline, let session = authStore.session {
             remoteProgress = try? await apiClient.audiobookshelf.fetchMediaProgress(
                 session: session,
                 itemID: audiobook.id
@@ -187,6 +199,12 @@ final class PlayerViewModel {
                 }
                 remoteBookmarks = details.bookmarks
                 remoteTracks = details.tracks
+                if !details.chapters.isEmpty {
+                    allChapters = details.chapters
+                }
+            }
+            if remoteProgress != nil || !remoteTracks.isEmpty {
+                connectivityStore.markServerReachable()
             }
         }
 
@@ -213,13 +231,14 @@ final class PlayerViewModel {
 
         playerService.configure(
             audiobook: audiobook,
-            chapter: currentChapter,
+            chapter: nil,
             initialTime: chosenProgress.positionSeconds,
-            tracks: remoteTracks
+            tracks: localTracks.isEmpty ? remoteTracks : localTracks
         )
-        tracks = remoteTracks
-        duration = max(playerService.duration, chosenProgress.durationSeconds)
-        currentTime = min(chosenProgress.positionSeconds, max(duration, chosenProgress.positionSeconds))
+        tracks = localTracks.isEmpty ? remoteTracks : localTracks
+        duration = max(resolvedDurationHint(), chosenProgress.durationSeconds, playerService.duration)
+        currentTime = min(chosenProgress.positionSeconds, duration)
+        currentChapter = chapterFor(position: currentTime)
         isPlaying = false
 
         persistLocalProgress()
@@ -260,15 +279,18 @@ final class PlayerViewModel {
     }
 
     func seek(to value: TimeInterval) {
-        playerService.seek(to: value)
+        let clamped = min(max(value, 0), duration)
+        playerService.seek(to: clamped)
         currentTime = playerService.currentTime
+        currentChapter = chapterFor(position: currentTime)
         persistLocalProgress()
         scheduleSync(immediate: true)
     }
 
     func markAsPlayed() {
-        seek(to: duration > 0 ? duration : currentTime)
-        pause()
+        playerService.pause()
+        isPlaying = false
+        currentTime = duration > 0 ? duration : currentTime
         persistLocalProgress(forceFinished: true)
         scheduleSync(immediate: true, forceFinished: true)
     }
@@ -287,14 +309,14 @@ final class PlayerViewModel {
     }
 
     func nextChapter() {
-        guard let chapterIndex, chapterIndex < (audiobook.chapters.count - 1) else {
+        guard let chapterIndex, chapterIndex < (allChapters.count - 1) else {
             return
         }
         switchToChapter(at: chapterIndex + 1)
     }
 
     func selectChapter(_ chapter: Chapter) {
-        if let index = audiobook.chapters.firstIndex(where: { $0.id == chapter.id }) {
+        if let index = allChapters.firstIndex(where: { $0.id == chapter.id }) {
             switchToChapter(at: index)
         }
     }
@@ -380,8 +402,12 @@ final class PlayerViewModel {
     }
 
     private func onPlayerTick(_ newTime: TimeInterval) {
-        currentTime = newTime
-        duration = max(duration, playerService.duration)
+        currentTime = min(newTime, duration)
+        duration = max(duration, resolvedDurationHint())
+        if let chapter = chapterFor(position: currentTime), chapter.id != currentChapter?.id {
+            currentChapter = chapter
+            nowPlayingService.update(audiobook: audiobook, chapter: currentChapter)
+        }
         if duration > 0, currentTime >= duration {
             isPlaying = false
         }
@@ -433,10 +459,6 @@ final class PlayerViewModel {
     }
 
     private func syncProgress(forceFinished: Bool = false) async {
-        guard !remoteSyncDisabled else {
-            syncStatusText = "Local only"
-            return
-        }
         guard let session = authStore.session else {
             syncStatusText = "Local only"
             return
@@ -461,12 +483,6 @@ final class PlayerViewModel {
             syncStatusText = "Synced"
             errorMessage = nil
         } catch {
-            if let apiError = error as? APIError, apiError.isAPIMismatchLike {
-                remoteSyncDisabled = true
-                syncStatusText = "Local only"
-                logger.info("Progress sync disabled for this session due to server/API mismatch.")
-                return
-            }
             guard requestID == syncRequestID else {
                 return
             }
@@ -480,35 +496,48 @@ final class PlayerViewModel {
     }
 
     private func resolvedDurationHint() -> TimeInterval {
-        if let currentChapter {
-            return currentChapter.duration
+        let total = allChapters.reduce(0) { $0 + $1.duration }
+        return total > 0 ? total : 0
+    }
+
+    private func chapterOffset(for chapter: Chapter?) -> TimeInterval {
+        guard let chapter,
+              let index = allChapters.firstIndex(where: { $0.id == chapter.id }) else {
+            return 0
         }
-        return audiobook.chapters.reduce(0) { $0 + $1.duration }
+        return allChapters.prefix(index).reduce(0) { $0 + $1.duration }
+    }
+
+    private func chapterFor(position: TimeInterval) -> Chapter? {
+        guard !allChapters.isEmpty else { return nil }
+        var cumulative: TimeInterval = 0
+        for chapter in allChapters {
+            cumulative += chapter.duration
+            if position < cumulative {
+                return chapter
+            }
+        }
+        return allChapters.last
     }
 
     private var chapterIndex: Int? {
         guard let currentChapter else {
             return nil
         }
-        return audiobook.chapters.firstIndex(where: { $0.id == currentChapter.id })
+        return allChapters.firstIndex(where: { $0.id == currentChapter.id })
     }
 
     private func switchToChapter(at index: Int) {
-        guard audiobook.chapters.indices.contains(index) else {
+        guard allChapters.indices.contains(index) else {
             return
         }
 
         syncTask?.cancel()
         let wasPlaying = isPlaying
-        currentChapter = audiobook.chapters[index]
-        playerService.configure(
-            audiobook: audiobook,
-            chapter: currentChapter,
-            initialTime: 0,
-            tracks: tracks
-        )
-        currentTime = 0
-        duration = max(playerService.duration, resolvedDurationHint())
+        currentChapter = allChapters[index]
+        let offset = chapterOffset(for: currentChapter)
+        playerService.seek(to: offset)
+        currentTime = playerService.currentTime
         nowPlayingService.update(audiobook: audiobook, chapter: currentChapter)
         persistLocalProgress()
         if wasPlaying {
@@ -528,19 +557,10 @@ final class PlayerViewModel {
         }
 
         let chosen = useServer ? conflict.remote : conflict.local
-        if let chapterID = chosen.chapterID,
-           let chapter = audiobook.chapters.first(where: { $0.id == chapterID }) {
-            currentChapter = chapter
-        }
-
-        playerService.configure(
-            audiobook: audiobook,
-            chapter: currentChapter,
-            initialTime: chosen.positionSeconds,
-            tracks: tracks
-        )
-        duration = max(playerService.duration, chosen.durationSeconds, resolvedDurationHint())
-        currentTime = min(chosen.positionSeconds, max(duration, chosen.positionSeconds))
+        duration = max(resolvedDurationHint(), chosen.durationSeconds)
+        playerService.seek(to: min(chosen.positionSeconds, duration))
+        currentTime = playerService.currentTime
+        currentChapter = chapterFor(position: currentTime)
         isPlaying = false
         progressConflict = nil
         nowPlayingService.update(audiobook: audiobook, chapter: currentChapter)

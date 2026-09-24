@@ -53,6 +53,38 @@ Codex must always run code review and tests before every commit and push, automa
 
 If no staged diff exists, do not commit.
 
+## Agentic Task Artifacts
+
+For medium and large tasks, create a task folder under:
+`docs/agentic/tasks/<task-id>/`
+
+For every non-trivial implementation request, Codex must automatically create and maintain task artifacts end-to-end. The user should only need to describe the functionality.
+
+Task ID format:
+`YYYY-MM-DD-<slug>` (example: `2026-03-01-auth-refresh`)
+
+Required task artifacts:
+
+- `research.md`
+- `plan.md`
+- `review.md`
+- `validation.md`
+
+`implementation-notes.md` is required when code changes are made.
+
+Use shared templates from:
+`docs/agentic/templates/`
+
+## Phase Gate Policy
+
+Codex must follow this phase order: Researcher -> Planner -> Implementer -> Reviewer -> Bug Fixer -> Validator.
+
+- Do not implement before `plan.md` exists and is decision complete
+- Do not commit before review findings are resolved or explicitly accepted as risk
+- Run `./scripts/precommit.sh` before every commit
+- Run `./scripts/prepush.sh` before every push
+- If checks cannot run, record the reason in `validation.md` and call it out in handoff notes
+
 ## Commit & Pull Request Guidelines
 
 Current commit history uses short, scoped, imperative messages such as:

@@ -346,6 +346,7 @@ Goal: Download audiobooks locally and play them without network connectivity.
 
 - Download audiobook
 - View download state/progress
+- View downloaded books/remove download
 - Play offline
 - Delete download
 

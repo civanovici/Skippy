@@ -8,6 +8,7 @@ final class AppDependencies {
     let playerService: PlayerServiceProtocol
     let nowPlayingService: NowPlayingServiceProtocol
     let downloadManager: DownloadManaging
+    let connectivityStore: ConnectivityStore
     let persistenceController: PersistenceController
     let logger: Logger
 
@@ -17,6 +18,7 @@ final class AppDependencies {
         playerService: PlayerServiceProtocol,
         nowPlayingService: NowPlayingServiceProtocol,
         downloadManager: DownloadManaging,
+        connectivityStore: ConnectivityStore,
         persistenceController: PersistenceController,
         logger: Logger
     ) {
@@ -25,6 +27,7 @@ final class AppDependencies {
         self.playerService = playerService
         self.nowPlayingService = nowPlayingService
         self.downloadManager = downloadManager
+        self.connectivityStore = connectivityStore
         self.persistenceController = persistenceController
         self.logger = logger
     }
@@ -38,6 +41,7 @@ final class AppDependencies {
             playerService: PlayerService(),
             nowPlayingService: NowPlayingService(),
             downloadManager: DownloadManager(),
+            connectivityStore: ConnectivityStore(),
             persistenceController: .shared,
             logger: logger
         )
@@ -52,6 +56,7 @@ final class AppDependencies {
             playerService: PlayerService(),
             nowPlayingService: NowPlayingService(),
             downloadManager: DownloadManager(),
+            connectivityStore: ConnectivityStore(),
             persistenceController: .shared,
             logger: logger
         )

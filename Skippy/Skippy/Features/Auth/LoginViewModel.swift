@@ -4,9 +4,9 @@ import Observation
 @MainActor
 @Observable
 final class LoginViewModel {
-    var serverURL = "https://demo.audiobookshelf.org"
-    var username = "reader"
-    var password = "password"
+    var serverURL = "http://orin-nas.tail5bd72f.ts.net:13378/audiobookshelf"
+    var username = ""
+    var password = ""
     var isLoading = false
     var errorMessage: String?
 

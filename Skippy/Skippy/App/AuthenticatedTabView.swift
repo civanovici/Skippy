@@ -12,6 +12,8 @@ struct AuthenticatedTabView: View {
                 viewModel: HomeViewModel(
                     apiClient: dependencies.apiClient,
                     authStore: dependencies.authStore,
+                    downloadManager: dependencies.downloadManager,
+                    connectivityStore: dependencies.connectivityStore,
                     logger: dependencies.logger
                 ),
                 makeBookDetailViewModel: { book in
@@ -19,6 +21,8 @@ struct AuthenticatedTabView: View {
                         book: book,
                         apiClient: dependencies.apiClient,
                         authStore: dependencies.authStore,
+                        downloadManager: dependencies.downloadManager,
+                        connectivityStore: dependencies.connectivityStore,
                         persistenceController: dependencies.persistenceController,
                         logger: dependencies.logger
                     )
@@ -31,6 +35,8 @@ struct AuthenticatedTabView: View {
                         nowPlayingService: dependencies.nowPlayingService,
                         apiClient: dependencies.apiClient,
                         authStore: dependencies.authStore,
+                        downloadManager: dependencies.downloadManager,
+                        connectivityStore: dependencies.connectivityStore,
                         persistenceController: dependencies.persistenceController,
                         logger: dependencies.logger
                     )
@@ -45,6 +51,8 @@ struct AuthenticatedTabView: View {
                 viewModel: LibraryViewModel(
                     apiClient: dependencies.apiClient,
                     authStore: dependencies.authStore,
+                    downloadManager: dependencies.downloadManager,
+                    connectivityStore: dependencies.connectivityStore,
                     logger: dependencies.logger
                 ),
                 makeBookDetailViewModel: { book in
@@ -52,6 +60,8 @@ struct AuthenticatedTabView: View {
                         book: book,
                         apiClient: dependencies.apiClient,
                         authStore: dependencies.authStore,
+                        downloadManager: dependencies.downloadManager,
+                        connectivityStore: dependencies.connectivityStore,
                         persistenceController: dependencies.persistenceController,
                         logger: dependencies.logger
                     )
@@ -64,6 +74,8 @@ struct AuthenticatedTabView: View {
                         nowPlayingService: dependencies.nowPlayingService,
                         apiClient: dependencies.apiClient,
                         authStore: dependencies.authStore,
+                        downloadManager: dependencies.downloadManager,
+                        connectivityStore: dependencies.connectivityStore,
                         persistenceController: dependencies.persistenceController,
                         logger: dependencies.logger
                     )
@@ -78,6 +90,8 @@ struct AuthenticatedTabView: View {
                 viewModel: SeriesViewModel(
                     apiClient: dependencies.apiClient,
                     authStore: dependencies.authStore,
+                    downloadManager: dependencies.downloadManager,
+                    connectivityStore: dependencies.connectivityStore,
                     logger: dependencies.logger
                 ),
                 makeBookDetailViewModel: { book in
@@ -85,6 +99,8 @@ struct AuthenticatedTabView: View {
                         book: book,
                         apiClient: dependencies.apiClient,
                         authStore: dependencies.authStore,
+                        downloadManager: dependencies.downloadManager,
+                        connectivityStore: dependencies.connectivityStore,
                         persistenceController: dependencies.persistenceController,
                         logger: dependencies.logger
                     )
@@ -97,6 +113,8 @@ struct AuthenticatedTabView: View {
                         nowPlayingService: dependencies.nowPlayingService,
                         apiClient: dependencies.apiClient,
                         authStore: dependencies.authStore,
+                        downloadManager: dependencies.downloadManager,
+                        connectivityStore: dependencies.connectivityStore,
                         persistenceController: dependencies.persistenceController,
                         logger: dependencies.logger
                     )
@@ -111,6 +129,8 @@ struct AuthenticatedTabView: View {
                 viewModel: CollectionsViewModel(
                     apiClient: dependencies.apiClient,
                     authStore: dependencies.authStore,
+                    downloadManager: dependencies.downloadManager,
+                    connectivityStore: dependencies.connectivityStore,
                     logger: dependencies.logger
                 ),
                 makeBookDetailViewModel: { book in
@@ -118,6 +138,8 @@ struct AuthenticatedTabView: View {
                         book: book,
                         apiClient: dependencies.apiClient,
                         authStore: dependencies.authStore,
+                        downloadManager: dependencies.downloadManager,
+                        connectivityStore: dependencies.connectivityStore,
                         persistenceController: dependencies.persistenceController,
                         logger: dependencies.logger
                     )
@@ -130,6 +152,8 @@ struct AuthenticatedTabView: View {
                         nowPlayingService: dependencies.nowPlayingService,
                         apiClient: dependencies.apiClient,
                         authStore: dependencies.authStore,
+                        downloadManager: dependencies.downloadManager,
+                        connectivityStore: dependencies.connectivityStore,
                         persistenceController: dependencies.persistenceController,
                         logger: dependencies.logger
                     )

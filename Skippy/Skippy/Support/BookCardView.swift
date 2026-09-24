@@ -2,6 +2,7 @@ import SwiftUI
 
 struct BookCardView: View {
     let book: Audiobook
+    var isDownloaded: Bool = false
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
@@ -37,6 +38,18 @@ struct BookCardView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .padding(8)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            }
+
+            if isDownloaded {
+                Label("Offline", systemImage: "arrow.down.circle.fill")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.blue.opacity(0.9))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .padding(8)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
             }
         }
         .frame(maxWidth: .infinity)

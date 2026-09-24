@@ -789,6 +789,8 @@ struct SkippyTests {
         let viewModel = LibraryViewModel(
             apiClient: StubAPIClient(audiobookshelf: StubAudiobookshelfAPI()),
             authStore: authStore,
+            downloadManager: DownloadManager(),
+            connectivityStore: ConnectivityStore(),
             logger: Logger()
         )
 
@@ -816,6 +818,8 @@ struct SkippyTests {
         let viewModel = LibraryViewModel(
             apiClient: StubAPIClient(audiobookshelf: api),
             authStore: authStore,
+            downloadManager: DownloadManager(),
+            connectivityStore: ConnectivityStore(),
             logger: Logger()
         )
 
@@ -841,13 +845,16 @@ struct SkippyTests {
         let viewModel = LibraryViewModel(
             apiClient: StubAPIClient(audiobookshelf: api),
             authStore: authStore,
+            downloadManager: DownloadManager(),
+            connectivityStore: ConnectivityStore(),
             logger: Logger()
         )
 
         await viewModel.load()
 
         #expect(viewModel.books.isEmpty)
-        #expect(viewModel.errorMessage == APIError.networkUnreachable.errorDescription)
+        #expect(viewModel.isOfflineMode == true)
+        #expect(viewModel.errorMessage == nil)
         #expect(viewModel.isLoading == false)
     }
 
@@ -880,6 +887,8 @@ struct SkippyTests {
         let viewModel = LibraryViewModel(
             apiClient: StubAPIClient(audiobookshelf: api),
             authStore: authStore,
+            downloadManager: DownloadManager(),
+            connectivityStore: ConnectivityStore(),
             logger: Logger()
         )
 
@@ -888,7 +897,7 @@ struct SkippyTests {
         async let second: Void = viewModel.search(query: "new")
         _ = await (first, second)
 
-        #expect(viewModel.searchResults.map(\.id) == ["new"])
+        #expect(viewModel.searchResults.map { $0.id } == ["new"])
         #expect(viewModel.isSearching == false)
     }
 
@@ -1022,6 +1031,8 @@ struct SkippyTests {
             nowPlayingService: NowPlayingService(),
             apiClient: StubAPIClient(audiobookshelf: api),
             authStore: authStore,
+            downloadManager: DownloadManager(),
+            connectivityStore: ConnectivityStore(),
             persistenceController: persistence,
             logger: Logger()
         )

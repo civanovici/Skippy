@@ -12,12 +12,26 @@ final class CollectionsViewModel {
 
     private let apiClient: APIClientProtocol
     private let authStore: AuthStore
+    private let downloadManager: DownloadManaging
+    private let connectivityStore: ConnectivityStore
     private let logger: Logger
     private var searchRequestID = 0
 
-    init(apiClient: APIClientProtocol, authStore: AuthStore, logger: Logger) {
+    var isOfflineMode: Bool {
+        connectivityStore.isOfflineEffective
+    }
+
+    init(
+        apiClient: APIClientProtocol,
+        authStore: AuthStore,
+        downloadManager: DownloadManaging,
+        connectivityStore: ConnectivityStore,
+        logger: Logger
+    ) {
         self.apiClient = apiClient
         self.authStore = authStore
+        self.downloadManager = downloadManager
+        self.connectivityStore = connectivityStore
         self.logger = logger
     }
 
@@ -28,6 +42,11 @@ final class CollectionsViewModel {
             return
         }
 
+        if !connectivityStore.isNetworkReachable {
+            loadOfflineCollections()
+            return
+        }
+
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
@@ -35,13 +54,24 @@ final class CollectionsViewModel {
         do {
             collections = try await apiClient.audiobookshelf.fetchCollections(session: session)
             searchBooks = []
+            connectivityStore.markServerReachable()
         } catch {
-            errorMessage = error.localizedDescription
-            logger.error("Collections fetch failed: \(error.localizedDescription)")
+            connectivityStore.reportResult(.failure(error))
+            if isOfflineMode {
+                loadOfflineCollections()
+            } else {
+                errorMessage = error.localizedDescription
+                logger.error("Collections fetch failed: \(error.localizedDescription)")
+            }
         }
     }
 
     func search(query: String) async {
+        guard !isOfflineMode else {
+            searchBooks = []
+            isSearching = false
+            return
+        }
         searchRequestID += 1
         let requestID = searchRequestID
 
@@ -77,5 +107,14 @@ final class CollectionsViewModel {
         if requestID == searchRequestID {
             isSearching = false
         }
+    }
+
+    private func loadOfflineCollections() {
+        let downloaded = downloadManager.downloadedLibrary()
+        collections = downloaded.isEmpty
+            ? []
+            : [HomeShelf(id: "offline-collections", title: "Downloaded", books: downloaded)]
+        searchBooks = []
+        errorMessage = nil
     }
 }
