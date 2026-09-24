@@ -384,6 +384,55 @@ struct SkippyTests {
     }
 
     @Test
+    func sleepTimerFadesOutThenPausesAndRestoresVolume() async throws {
+        let player = FakePlayerService(volume: 0.8)
+        let viewModel = makeSleepTestPlayerViewModel(player: player)
+        viewModel.sleepFadeDuration = 0.3
+
+        viewModel.startSleepTimer(after: 0.4)
+        try await Task.sleep(for: .milliseconds(900))
+
+        let pauseIndex = try #require(player.events.firstIndex(of: .pause))
+        let fadeVolumes = player.events[..<pauseIndex].compactMap(\.volume)
+        #expect(fadeVolumes.count > 3)
+        #expect(zip(fadeVolumes, fadeVolumes.dropFirst()).allSatisfy { $0 >= $1 })
+        #expect((fadeVolumes.last ?? 1) < 0.01)
+        #expect(player.events.filter { $0 == .pause }.count == 1)
+        #expect(player.volume == 0.8)
+        #expect(viewModel.selectedSleepTimer == .off)
+    }
+
+    @Test
+    func cancellingSleepTimerMidFadeRestoresVolumeWithoutPausing() async throws {
+        let player = FakePlayerService(volume: 0.8)
+        let viewModel = makeSleepTestPlayerViewModel(player: player)
+        viewModel.sleepFadeDuration = 1
+
+        viewModel.startSleepTimer(after: 1)
+        try await Task.sleep(for: .milliseconds(400))
+        #expect(player.volume < 0.8)
+
+        viewModel.setSleepTimer(.off)
+        try await Task.sleep(for: .milliseconds(1500))
+
+        #expect(!player.events.contains(.pause))
+        #expect(abs(player.volume - 0.8) < 0.0001)
+    }
+
+    @Test
+    func stoppingPlayerMidFadeRestoresVolume() async throws {
+        let player = FakePlayerService(volume: 0.6)
+        let viewModel = makeSleepTestPlayerViewModel(player: player)
+        viewModel.sleepFadeDuration = 1
+
+        viewModel.startSleepTimer(after: 1)
+        try await Task.sleep(for: .milliseconds(400))
+        viewModel.stop()
+
+        #expect(player.volume == 0.6)
+    }
+
+    @Test
     func fetchCollectionsMapsGroupedBooks() async throws {
         let session = makeSession { request in
             let path = request.url?.path ?? ""
@@ -1422,6 +1471,70 @@ private final class CountingFileManager: FileManager, @unchecked Sendable {
         fileExistsCalls += 1
         return super.fileExists(atPath: path)
     }
+}
+
+@MainActor
+private func makeSleepTestPlayerViewModel(player: FakePlayerService) -> PlayerViewModel {
+    PlayerViewModel(
+        audiobook: Audiobook(id: "sleep-book", title: "Sleep", author: "A", progress: 0, coverURL: nil, chapters: []),
+        chapter: nil,
+        playerService: player,
+        nowPlayingService: NowPlayingService(),
+        apiClient: StubAPIClient(audiobookshelf: StubAudiobookshelfAPI()),
+        authStore: AuthStore(keychainStore: InMemoryKeychainStore(), logger: Logger()),
+        downloadManager: DownloadManager(),
+        connectivityStore: ConnectivityStore(),
+        persistenceController: PersistenceController(
+            userDefaults: UserDefaults(suiteName: "skippy.tests.sleep.\(UUID().uuidString)")!
+        ),
+        logger: Logger()
+    )
+}
+
+@MainActor
+private final class FakePlayerService: PlayerServiceProtocol {
+    enum Event: Equatable {
+        case volume(Float)
+        case pause
+
+        var volume: Float? {
+            if case let .volume(value) = self {
+                return value
+            }
+            return nil
+        }
+    }
+
+    private(set) var events: [Event] = []
+    var currentBook: Audiobook?
+    var currentChapter: Chapter?
+    var currentTime: TimeInterval = 0
+    var duration: TimeInterval = 0
+    var isPlaying = true
+    var rate: Float = 1
+    var onTick: ((TimeInterval) -> Void)?
+    var onError: ((PlayerServiceError) -> Void)?
+    var volume: Float {
+        didSet {
+            events.append(.volume(volume))
+        }
+    }
+
+    init(volume: Float) {
+        self.volume = volume
+    }
+
+    func configure(audiobook: Audiobook, chapter: Chapter?, initialTime: TimeInterval, tracks: [AudiobookTrack]) {}
+    func play() {
+        isPlaying = true
+    }
+    func pause() {
+        isPlaying = false
+        events.append(.pause)
+    }
+    func seek(to time: TimeInterval) {}
+    func seek(by seconds: TimeInterval) {}
+    func setRate(_ rate: Float) {}
 }
 
 /// Records a view model's `isLoading` flag at the moment its fetch runs.
