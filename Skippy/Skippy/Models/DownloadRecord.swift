@@ -23,6 +23,7 @@ struct DownloadedBookRecord: Codable, Equatable {
     let author: String
     let coverURL: URL?
     let chapters: [Chapter]
+    var series: [SeriesPosition]? = nil
     var tracks: [DownloadedTrackRecord]
     var downloadedAt: Date?
 

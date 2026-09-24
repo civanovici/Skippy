@@ -204,6 +204,141 @@ struct SkippyTests {
     }
 
     @Test
+    func seriesPositionParsesFlattenedSeriesName() {
+        let parsed = SeriesPosition.parse(seriesName: "Galaxy's Edge #10, Galaxy's Edge: Order of the Centurion #1")
+        #expect(parsed == [
+            SeriesPosition(id: nil, name: "Galaxy's Edge", sequence: "10"),
+            SeriesPosition(id: nil, name: "Galaxy's Edge: Order of the Centurion", sequence: "1"),
+        ])
+        #expect(SeriesPosition.parse(seriesName: "Expeditionary Force #3.5").first?.sortValue == 3.5)
+        #expect(SeriesPosition.parse(seriesName: "Standalone Saga") == [SeriesPosition(id: nil, name: "Standalone Saga", sequence: nil)])
+        #expect(SeriesPosition.parse(seriesName: "  ").isEmpty)
+    }
+
+    @Test
+    func booksSortBySeriesNumberWithUnnumberedLast() {
+        func book(_ id: String, _ title: String, _ seriesName: String) -> Audiobook {
+            Audiobook(id: id, title: title, author: "A", progress: 0, coverURL: nil, chapters: [],
+                      series: SeriesPosition.parse(seriesName: seriesName))
+        }
+        let books = [
+            book("a", "Part III", "Galaxy's Edge #6"),
+            book("b", "Extra", "Other Series #1"),
+            book("c", "Tin Man", "Galaxy's Edge #0.5"),
+            book("d", "Part I", "Galaxy's Edge #1"),
+            book("e", "Centurion", "Galaxy's Edge: Order of the Centurion #1, Galaxy's Edge #10"),
+        ]
+
+        #expect(books.dominantSeriesName == "Galaxy's Edge")
+        #expect(books.sortedBySeries("Galaxy's Edge").map(\.id) == ["c", "d", "a", "e", "b"])
+        #expect(books[4].seriesPosition(in: "Galaxy's Edge")?.sequence == "10")
+        #expect(books[4].seriesPosition(in: nil)?.sequence == "1")
+    }
+
+    @Test
+    func fetchSeriesAndCollectionsOrderBooksBySeriesNumber() async throws {
+        let session = makeSession { request in
+            let path = request.url?.path ?? ""
+            if path == "/api/libraries" {
+                return ok(request.url!, #"{"libraries":[{"id":"lib-a","mediaType":"book"}]}"#)
+            }
+            let books = """
+            [
+              {"id":"b3","mediaType":"book","media":{"metadata":{"title":"Paradise","authorName":"C","seriesName":"Expeditionary Force #3"}}},
+              {"id":"b1","mediaType":"book","media":{"metadata":{"title":"Columbus Day","authorName":"C","seriesName":"Expeditionary Force #1"}}},
+              {"id":"b35","mediaType":"book","media":{"metadata":{"title":"Trouble on Paradise","authorName":"C","seriesName":"Expeditionary Force #3.5"}}},
+              {"id":"b2","mediaType":"book","media":{"metadata":{"title":"SpecOps","authorName":"C","seriesName":"Expeditionary Force #2"}}}
+            ]
+            """
+            if path == "/api/libraries/lib-a/series" {
+                return ok(request.url!, #"{"results":[{"id":"s1","name":"Expeditionary Force","books":"# + books + #"}]}"#)
+            }
+            if path == "/api/libraries/lib-a/collections" {
+                return ok(request.url!, #"{"results":[{"id":"c1","name":"skippy","books":"# + books + #"}]}"#)
+            }
+            return ok(request.url!, #"{"results":[]}"#)
+        }
+
+        let api = AudiobookshelfHTTPAPI(session: session)
+        let userSession = UserSession(serverURL: URL(string: "http://example.test:1234")!, username: "u", token: "tkn")
+        let series = try await api.fetchSeries(session: userSession)
+        let collections = try await api.fetchCollections(session: userSession)
+
+        #expect(series[0].books.map(\.id) == ["b1", "b2", "b3", "b35"])
+        #expect(series[0].seriesName == "Expeditionary Force")
+        #expect(collections[0].books.map(\.id) == ["b1", "b2", "b3", "b35"])
+        #expect(collections[0].seriesName == "Expeditionary Force")
+        #expect(series[0].books[3].seriesPosition(in: "Expeditionary Force")?.sequence == "3.5")
+    }
+
+    @Test
+    func fetchBookDetailsMapsSeriesWithIDs() async throws {
+        let session = makeSession { request in
+            ok(request.url!, #"{"media":{"metadata":{"series":[{"id":"ser-1","name":"Galaxy's Edge","sequence":"10"}]}}}"#)
+        }
+        let api = AudiobookshelfHTTPAPI(session: session)
+        let details = try await api.fetchBookDetails(
+            session: UserSession(serverURL: URL(string: "http://example.test:1234")!, username: "u", token: "tkn"),
+            itemID: "b1"
+        )
+        #expect(details.series == [SeriesPosition(id: "ser-1", name: "Galaxy's Edge", sequence: "10")])
+    }
+
+    @Test
+    func fetchSeriesBooksFiltersBySeriesAndSorts() async throws {
+        let session = makeSession { request in
+            let path = request.url?.path ?? ""
+            if path == "/api/libraries" {
+                return ok(request.url!, #"{"libraries":[{"id":"lib-a","mediaType":"book"}]}"#)
+            }
+            if path == "/api/libraries/lib-a/items" {
+                let filter = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?
+                    .queryItems?.first(where: { $0.name == "filter" })?.value
+                guard filter == "series." + Data("ser-1".utf8).base64EncodedString() else {
+                    return ok(request.url!, #"{"results":[]}"#)
+                }
+                return ok(request.url!, """
+                {"results":[
+                  {"id":"b2","mediaType":"book","media":{"metadata":{"title":"Iron Wolves","authorName":"A","series":{"id":"ser-1","name":"Centurion","sequence":"2"}}}},
+                  {"id":"b1","mediaType":"book","media":{"metadata":{"title":"Order","authorName":"A","series":{"id":"ser-1","name":"Centurion","sequence":"1"}}}}
+                ],"total":2}
+                """)
+            }
+            return ok(request.url!, #"{"results":[]}"#)
+        }
+        let api = AudiobookshelfHTTPAPI(session: session)
+        let books = try await api.fetchSeriesBooks(
+            session: UserSession(serverURL: URL(string: "http://example.test:1234")!, username: "u", token: "tkn"),
+            series: SeriesPosition(id: "ser-1", name: "Centurion", sequence: nil)
+        )
+        #expect(books.map(\.id) == ["b1", "b2"])
+        #expect(books[0].seriesPosition(in: "Centurion")?.sequence == "1")
+    }
+
+    @Test
+    func seriesBooksViewModelLoadsBooksForSeries() async throws {
+        let series = SeriesPosition(id: "ser-1", name: "Centurion", sequence: "1")
+        let books = [Audiobook(id: "b1", title: "Order", author: "A", progress: 0, coverURL: nil, chapters: [], series: [series])]
+        let api = StubAudiobookshelfAPI(fetchSeriesBooksImpl: { _, requested in
+            #expect(requested == series)
+            return books
+        })
+        let viewModel = SeriesBooksViewModel(
+            series: series,
+            apiClient: StubAPIClient(audiobookshelf: api),
+            authStore: signedInAuthStore(),
+            connectivityStore: ConnectivityStore(),
+            logger: Logger()
+        )
+
+        await viewModel.load()
+
+        #expect(viewModel.books == books)
+        #expect(viewModel.errorMessage == nil)
+        #expect(viewModel.isLoading == false)
+    }
+
+    @Test
     func fetchCollectionsMapsGroupedBooks() async throws {
         let session = makeSession { request in
             let path = request.url?.path ?? ""
@@ -1277,6 +1412,7 @@ private struct StubAudiobookshelfAPI: AudiobookshelfAPI {
     var fetchPersonalizedShelvesImpl: ((UserSession) async throws -> [HomeShelf])?
     var fetchSeriesImpl: ((UserSession) async throws -> [HomeShelf])?
     var fetchCollectionsImpl: ((UserSession) async throws -> [HomeShelf])?
+    var fetchSeriesBooksImpl: ((UserSession, SeriesPosition) async throws -> [Audiobook])?
     var searchImpl: ((UserSession, String) async throws -> SearchResult)?
     var fetchMyListeningStatsImpl: ((UserSession, Int?) async throws -> UserListeningStats)?
     var fetchPrimaryLibraryStatsImpl: ((UserSession) async throws -> LibraryStatsSnapshot?)?
@@ -1341,6 +1477,13 @@ private struct StubAudiobookshelfAPI: AudiobookshelfAPI {
     func fetchCollections(session: UserSession) async throws -> [HomeShelf] {
         if let fetchCollectionsImpl {
             return try await fetchCollectionsImpl(session)
+        }
+        return []
+    }
+
+    func fetchSeriesBooks(session: UserSession, series: SeriesPosition) async throws -> [Audiobook] {
+        if let fetchSeriesBooksImpl {
+            return try await fetchSeriesBooksImpl(session, series)
         }
         return []
     }

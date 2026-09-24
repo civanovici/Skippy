@@ -33,6 +33,35 @@ final class AppDependencies {
     }
 
     @MainActor
+    func makeBookDetailViewModel(_ book: Audiobook) -> BookDetailViewModel {
+        BookDetailViewModel(
+            book: book,
+            apiClient: apiClient,
+            authStore: authStore,
+            downloadManager: downloadManager,
+            connectivityStore: connectivityStore,
+            persistenceController: persistenceController,
+            logger: logger
+        )
+    }
+
+    @MainActor
+    func makePlayerViewModel(_ book: Audiobook, chapter: Chapter?) -> PlayerViewModel {
+        PlayerViewModel(
+            audiobook: book,
+            chapter: chapter,
+            playerService: playerService,
+            nowPlayingService: nowPlayingService,
+            apiClient: apiClient,
+            authStore: authStore,
+            downloadManager: downloadManager,
+            connectivityStore: connectivityStore,
+            persistenceController: persistenceController,
+            logger: logger
+        )
+    }
+
+    @MainActor
     static func makeLive() -> AppDependencies {
         let logger = Logger()
         return AppDependencies(

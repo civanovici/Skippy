@@ -7,6 +7,7 @@ struct Audiobook: Identifiable, Hashable {
     let progress: Double
     let coverURL: URL?
     let chapters: [Chapter]
+    var series: [SeriesPosition] = []
 }
 
 extension Audiobook {

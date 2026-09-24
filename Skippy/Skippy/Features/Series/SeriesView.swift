@@ -34,7 +34,7 @@ struct SeriesView: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 20) {
                             ForEach(filteredSeries) { shelf in
-                                ShelfView(title: shelf.title, books: shelf.books, downloadedBookIDs: downloadedBookIDs) { book in
+                                ShelfView(title: shelf.title, books: shelf.books, downloadedBookIDs: downloadedBookIDs, seriesName: shelf.seriesName) { book in
                                     BookDetailView(
                                         viewModel: makeBookDetailViewModel(book),
                                         makePlayerViewModel: { chapter in
@@ -126,7 +126,7 @@ struct SeriesView: View {
             guard !books.isEmpty else {
                 return nil
             }
-            return HomeShelf(id: shelf.id, title: shelf.title, books: books)
+            return HomeShelf(id: shelf.id, title: shelf.title, books: books, seriesName: shelf.seriesName)
         }
     }
 }

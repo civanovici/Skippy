@@ -208,6 +208,7 @@ final class DownloadManager: DownloadManaging {
             author: audiobook.author,
             coverURL: audiobook.coverURL,
             chapters: details.chapters.isEmpty ? audiobook.chapters : details.chapters,
+            series: details.series.isEmpty ? audiobook.series : details.series,
             tracks: mergedTracks,
             downloadedAt: existing?.downloadedAt
         )
@@ -347,7 +348,8 @@ final class DownloadManager: DownloadManaging {
                     author: book.author,
                     progress: 0,
                     coverURL: book.coverURL,
-                    chapters: book.chapters
+                    chapters: book.chapters,
+                    series: book.series ?? []
                 )
             }
             .sorted {

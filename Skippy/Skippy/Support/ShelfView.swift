@@ -4,17 +4,20 @@ struct ShelfView<Destination: View>: View {
     let title: String
     let books: [Audiobook]
     let downloadedBookIDs: Set<String>
+    let seriesName: String?
     let destination: (Audiobook) -> Destination
 
     init(
         title: String,
         books: [Audiobook],
         downloadedBookIDs: Set<String> = [],
+        seriesName: String? = nil,
         destination: @escaping (Audiobook) -> Destination
     ) {
         self.title = title
         self.books = books
         self.downloadedBookIDs = downloadedBookIDs
+        self.seriesName = seriesName
         self.destination = destination
     }
 
@@ -30,7 +33,7 @@ struct ShelfView<Destination: View>: View {
                         NavigationLink {
                             destination(book)
                         } label: {
-                            BookCardView(book: book, isDownloaded: downloadedBookIDs.contains(book.id))
+                            BookCardView(book: book, isDownloaded: downloadedBookIDs.contains(book.id), seriesName: seriesName)
                                 .frame(width: 150)
                         }
                         .buttonStyle(.plain)
