@@ -3,6 +3,8 @@ import SwiftUI
 struct BookCardView: View {
     let book: Audiobook
     var isDownloaded: Bool = false
+    /// Series to number the book in; nil shows its first series.
+    var seriesName: String? = nil
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
@@ -38,6 +40,19 @@ struct BookCardView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .padding(8)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            }
+
+            if let sequence = book.seriesPosition(in: seriesName)?.sequence {
+                Text("#\(sequence)")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.black.opacity(0.7))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .padding(8)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .accessibilityLabel("Book \(sequence)")
             }
 
             if isDownloaded {

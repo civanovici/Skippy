@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct BookDetailView: View {
+    @Environment(AppDependencies.self) private var dependencies
     @State var viewModel: BookDetailViewModel
     let makePlayerViewModel: (Chapter?) -> PlayerViewModel
     @State private var chaptersExpanded = true
@@ -127,7 +128,47 @@ struct BookDetailView: View {
                 Text("by \(viewModel.book.author)")
                     .font(.title3)
                     .foregroundStyle(.secondary)
+                ForEach(viewModel.seriesPositions, id: \.self) { position in
+                    seriesLink(position)
+                }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func seriesLink(_ position: SeriesPosition) -> some View {
+        let label = HStack(spacing: 6) {
+            Image(systemName: "square.stack.3d.up.fill")
+            if let sequence = position.sequence {
+                Text("\(position.name) · Book \(sequence)")
+            } else {
+                Text(position.name)
+            }
+        }
+        .font(.subheadline.weight(.semibold))
+        .multilineTextAlignment(.leading)
+
+        if position.id != nil, !viewModel.isOfflineMode {
+            NavigationLink {
+                SeriesBooksView(viewModel: SeriesBooksViewModel(
+                    series: position,
+                    apiClient: dependencies.apiClient,
+                    authStore: dependencies.authStore,
+                    connectivityStore: dependencies.connectivityStore,
+                    logger: dependencies.logger
+                ))
+            } label: {
+                HStack(spacing: 4) {
+                    label
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                }
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.tint)
+        } else {
+            label
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -494,4 +535,5 @@ struct BookDetailView: View {
             }
         )
     }
+    .environment(AppDependencies.makeMock())
 }

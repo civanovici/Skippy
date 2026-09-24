@@ -105,6 +105,14 @@ final class BookDetailViewModel {
         details?.subtitle
     }
 
+    /// Series from the loaded details (they carry ids for navigation), else from the list item.
+    var seriesPositions: [SeriesPosition] {
+        if let series = details?.series, !series.isEmpty {
+            return series
+        }
+        return book.series
+    }
+
     var narratorsText: String {
         let narrators = details?.narrators ?? []
         return narrators.isEmpty ? "Unknown" : narrators.joined(separator: ", ")

@@ -7,6 +7,7 @@ protocol AudiobookshelfAPI {
     func fetchPersonalizedShelves(session: UserSession) async throws -> [HomeShelf]
     func fetchSeries(session: UserSession) async throws -> [HomeShelf]
     func fetchCollections(session: UserSession) async throws -> [HomeShelf]
+    func fetchSeriesBooks(session: UserSession, series: SeriesPosition) async throws -> [Audiobook]
     func search(session: UserSession, query: String) async throws -> SearchResult
     func fetchMyListeningStats(session: UserSession, days: Int?) async throws -> UserListeningStats
     func fetchPrimaryLibraryStats(session: UserSession) async throws -> LibraryStatsSnapshot?
@@ -232,6 +233,29 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
         )
     }
 
+    func fetchSeriesBooks(session userSession: UserSession, series: SeriesPosition) async throws -> [Audiobook] {
+        guard let seriesID = series.id else {
+            return []
+        }
+        let filter = "series." + Data(seriesID.utf8).base64EncodedString()
+        var booksByID: [String: Audiobook] = [:]
+        for library in try await targetAudiobookLibraries(session: userSession) {
+            let request = makeAuthedRequest(
+                userSession.serverURL.appending(path: "/api/libraries/\(library.id)/items"),
+                token: userSession.token,
+                queryItems: [
+                    URLQueryItem(name: "filter", value: filter),
+                    URLQueryItem(name: "minified", value: "1"),
+                    URLQueryItem(name: "limit", value: "500"),
+                ]
+            )
+            for item in try await fetchLibraryItems(request: request) where (item.mediaType ?? "book") == "book" {
+                booksByID[item.id] = mapAudiobook(item, userSession: userSession)
+            }
+        }
+        return Array(booksByID.values).sortedBySeries(series.name)
+    }
+
     func search(session userSession: UserSession, query: String) async throws -> SearchResult {
         let targetLibraries = try await targetAudiobookLibraries(session: userSession)
         guard !targetLibraries.isEmpty else {
@@ -285,9 +309,8 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
                 HomeShelf(
                     id: shelf.id,
                     title: shelf.title,
-                    books: shelf.books.sorted {
-                        $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
-                    }
+                    books: shelf.books.sortedBySeries(shelf.title),
+                    seriesName: shelf.title
                 )
             }
             .sorted {
@@ -361,8 +384,24 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
             author: author,
             progress: min(max(progress, 0), 1),
             coverURL: makeCoverURL(baseURL: userSession.serverURL, itemID: item.id, token: userSession.token),
-            chapters: chapters
+            chapters: chapters,
+            series: mapSeries(item.media?.metadata?.series, seriesName: item.media?.metadata?.seriesName)
         )
+    }
+
+    /// Prefers the structured `series` entries (expanded or series-filtered items) and falls
+    /// back to parsing the flattened `seriesName` that minified items carry.
+    private func mapSeries(_ refs: SeriesRefList?, seriesName: String?) -> [SeriesPosition] {
+        let structured = (refs?.values ?? []).compactMap { ref -> SeriesPosition? in
+            guard let name = ref.name?.nonEmpty else {
+                return nil
+            }
+            return SeriesPosition(id: ref.id, name: name, sequence: ref.sequence?.nonEmpty)
+        }
+        if !structured.isEmpty {
+            return structured
+        }
+        return seriesName.map(SeriesPosition.parse(seriesName:)) ?? []
     }
 
     private func mapBookDetails(_ item: ItemDetailsResponse, itemID: String, userSession: UserSession) -> AudiobookDetails {
@@ -409,7 +448,8 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
             chapters: chapters,
             tracks: tracks,
             userProgress: mappedProgress,
-            bookmarks: mappedBookmarks
+            bookmarks: mappedBookmarks,
+            series: mapSeries(metadata?.series, seriesName: nil)
         )
     }
 
@@ -683,12 +723,13 @@ struct AudiobookshelfHTTPAPI: AudiobookshelfAPI {
 
         return shelvesByID.values
             .map { shelf in
-                HomeShelf(
+                // A series is numbered by itself; a collection by the series most of its books share.
+                let seriesName = endpoint == "series" ? shelf.title : shelf.books.dominantSeriesName
+                return HomeShelf(
                     id: shelf.id,
                     title: shelf.title,
-                    books: shelf.books.sorted {
-                        $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
-                    }
+                    books: shelf.books.sortedBySeries(seriesName),
+                    seriesName: seriesName
                 )
             }
             .sorted {
@@ -1007,6 +1048,13 @@ struct MockAudiobookshelfAPI: AudiobookshelfAPI {
         return [
             HomeShelf(id: "collection-1", title: "Sci-Fi Favorites", books: Audiobook.mockLibrary),
         ]
+    }
+
+    func fetchSeriesBooks(session: UserSession, series: SeriesPosition) async throws -> [Audiobook] {
+        guard !session.token.isEmpty else {
+            throw APIError.unauthorized
+        }
+        return Audiobook.mockLibrary.sortedBySeries(series.name)
     }
 
     func search(session: UserSession, query: String) async throws -> SearchResult {
@@ -1476,6 +1524,49 @@ private struct LibraryItemMetadata: Decodable {
     let title: String?
     let authorName: String?
     let authors: [LibraryItemAuthor]?
+    let seriesName: String?
+    let series: SeriesRefList?
+}
+
+private struct SeriesRef: Decodable {
+    let id: String?
+    let name: String?
+    let sequence: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case sequence
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try? container.decodeIfPresent(String.self, forKey: .id)
+        name = try? container.decodeIfPresent(String.self, forKey: .name)
+        if let text = try? container.decodeIfPresent(String.self, forKey: .sequence) {
+            sequence = text
+        } else if let number = container.decodeLossyTimeInterval(forKey: .sequence) {
+            sequence = number.rounded() == number ? String(Int(number)) : String(number)
+        } else {
+            sequence = nil
+        }
+    }
+}
+
+/// `series` is an array on expanded items but a single object on series-filtered items.
+private struct SeriesRefList: Decodable {
+    let values: [SeriesRef]
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let list = try? container.decode([LossyDecodable<SeriesRef>].self) {
+            values = list.compactMap(\.value)
+        } else if let single = try? container.decode(SeriesRef.self) {
+            values = [single]
+        } else {
+            values = []
+        }
+    }
 }
 
 private struct LibraryItemAuthor: Decodable {
@@ -1537,6 +1628,7 @@ private struct ItemDetailsMetadata: Decodable {
     let publisher: String?
     let description: String?
     let descriptionPlain: String?
+    let series: SeriesRefList?
 
     private enum CodingKeys: String, CodingKey {
         case subtitle
@@ -1546,6 +1638,7 @@ private struct ItemDetailsMetadata: Decodable {
         case publisher
         case description
         case descriptionPlain
+        case series
     }
 
     init(from decoder: Decoder) throws {
@@ -1556,6 +1649,7 @@ private struct ItemDetailsMetadata: Decodable {
         publisher = try container.decodeIfPresent(String.self, forKey: .publisher)
         description = try container.decodeIfPresent(String.self, forKey: .description)
         descriptionPlain = try container.decodeIfPresent(String.self, forKey: .descriptionPlain)
+        series = try? container.decodeIfPresent(SeriesRefList.self, forKey: .series)
 
         if let yearString = (try? container.decodeIfPresent(String.self, forKey: .publishedYear)) ?? nil {
             publishedYear = yearString

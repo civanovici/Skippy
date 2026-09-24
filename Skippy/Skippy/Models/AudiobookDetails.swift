@@ -13,6 +13,7 @@ struct AudiobookDetails: Hashable {
     let tracks: [AudiobookTrack]
     let userProgress: PlaybackProgress?
     let bookmarks: [AudioBookmark]
+    var series: [SeriesPosition] = []
 }
 
 struct AudiobookTrack: Identifiable, Hashable {
