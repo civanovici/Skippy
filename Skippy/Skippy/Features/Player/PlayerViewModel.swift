@@ -66,6 +66,11 @@ final class PlayerViewModel {
 
     private var sleepEndDate: Date?
     private var sleepTask: Task<Void, Never>?
+    /// How long the volume fades out before the sleep timer pauses playback.
+    var sleepFadeDuration: TimeInterval = 30
+    /// Volume to go back to once a sleep fade has started; nil when no fade is in progress.
+    private var volumeBeforeSleepFade: Float?
+    private var volumeRestoreTask: Task<Void, Never>?
     private var syncTask: Task<Void, Never>?
     private var syncRequestID = 0
     private var lastTickSyncTime: TimeInterval = 0
@@ -146,6 +151,11 @@ final class PlayerViewModel {
 
     func stop() {
         sleepTask?.cancel()
+        volumeRestoreTask?.cancel()
+        if let volume = volumeBeforeSleepFade {
+            playerService.volume = volume
+            volumeBeforeSleepFade = nil
+        }
         syncTask?.cancel()
         playerService.onTick = nil
         playerService.onError = nil
@@ -382,21 +392,68 @@ final class PlayerViewModel {
 
     func setSleepTimer(_ option: SleepTimerOption) {
         selectedSleepTimer = option
+        startSleepTimer(after: option.duration)
+    }
+
+    /// Arms the sleep timer (or clears it when `duration` is nil). The last
+    /// `sleepFadeDuration` seconds fade the volume out; playback pauses once it reaches
+    /// zero and the original volume is put back while paused.
+    func startSleepTimer(after duration: TimeInterval?) {
         sleepTask?.cancel()
         sleepTask = nil
         sleepEndDate = nil
+        rampVolumeBackAfterSleepFade()
 
-        guard let duration = option.duration else {
+        guard let duration else {
             return
         }
         sleepEndDate = Date().addingTimeInterval(duration)
+        let fadeDuration = min(max(sleepFadeDuration, 0), duration)
         sleepTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(duration))
-            guard let self else { return }
-            await MainActor.run {
-                self.pause()
-                self.selectedSleepTimer = .off
-                self.sleepEndDate = nil
+            try? await Task.sleep(for: .seconds(duration - fadeDuration))
+            guard !Task.isCancelled, let self else { return }
+            guard await self.fadeOutVolume(over: fadeDuration) else { return }
+            self.pause()
+            if let volume = self.volumeBeforeSleepFade {
+                self.playerService.volume = volume
+                self.volumeBeforeSleepFade = nil
+            }
+            self.selectedSleepTimer = .off
+            self.sleepEndDate = nil
+        }
+    }
+
+    /// Returns false if the fade was cancelled before reaching zero.
+    private func fadeOutVolume(over fadeDuration: TimeInterval) async -> Bool {
+        let startVolume = playerService.volume
+        volumeBeforeSleepFade = startVolume
+        let stepCount = max(Int((fadeDuration / 0.05).rounded()), 1)
+        for step in 1...stepCount {
+            try? await Task.sleep(for: .seconds(fadeDuration / Double(stepCount)))
+            if Task.isCancelled {
+                return false
+            }
+            // Squared curve: loudness drops more naturally than a linear ramp.
+            let remaining = 1 - Double(step) / Double(stepCount)
+            playerService.volume = startVolume * Float(remaining * remaining)
+        }
+        return true
+    }
+
+    /// Timer cleared or replaced mid-fade: bring the volume back up over about a second.
+    private func rampVolumeBackAfterSleepFade() {
+        guard let targetVolume = volumeBeforeSleepFade else {
+            return
+        }
+        volumeBeforeSleepFade = nil
+        let startVolume = playerService.volume
+        volumeRestoreTask?.cancel()
+        volumeRestoreTask = Task { [weak self] in
+            let stepCount = 20
+            for step in 1...stepCount {
+                try? await Task.sleep(for: .milliseconds(50))
+                guard !Task.isCancelled, let self else { return }
+                self.playerService.volume = startVolume + (targetVolume - startVolume) * Float(step) / Float(stepCount)
             }
         }
     }

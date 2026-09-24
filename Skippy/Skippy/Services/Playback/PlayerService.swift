@@ -16,6 +16,8 @@ protocol PlayerServiceProtocol: AnyObject {
     var duration: TimeInterval { get }
     var isPlaying: Bool { get }
     var rate: Float { get }
+    /// Player (not system) volume, 0...1; used to fade out for the sleep timer.
+    var volume: Float { get set }
     var onTick: ((TimeInterval) -> Void)? { get set }
     var onError: ((PlayerServiceError) -> Void)? { get set }
 
@@ -156,6 +158,11 @@ final class PlayerService: PlayerServiceProtocol {
 
     func seek(by seconds: TimeInterval) {
         seek(to: currentTime + seconds)
+    }
+
+    var volume: Float {
+        get { player.volume }
+        set { player.volume = min(max(newValue, 0), 1) }
     }
 
     func setRate(_ rate: Float) {
