@@ -36,3 +36,6 @@ fastlane/test_output/
 
 # Local Xcode signing overrides
 Skippy/Config/Signing/Signing.local.xcconfig
+
+# Local secrets
+.env

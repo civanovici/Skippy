@@ -158,7 +158,19 @@ final class BookDetailViewModel {
     }
 
     var resumeChapter: Chapter? {
-        displayChapters.first
+        let chapters = displayChapters
+        guard !chapters.isEmpty else { return nil }
+        let total = chapters.reduce(0) { $0 + $1.duration }
+        let elapsed = resolvedProgressSeconds(totalDuration: total)
+        guard elapsed > 0 else { return chapters.first }
+        var cumulative: TimeInterval = 0
+        for chapter in chapters {
+            cumulative += chapter.duration
+            if elapsed < cumulative {
+                return chapter
+            }
+        }
+        return chapters.last
     }
 
     var isOfflineMode: Bool {
